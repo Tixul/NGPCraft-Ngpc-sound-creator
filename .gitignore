@@ -1,0 +1,44 @@
+# Build artifacts
+/build-mingw/
+/dist/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+*.o
+*.obj
+*.exe
+*.dll
+*.lib
+*.zip
+*.7z
+*.vgz
+
+# Editor / IDE
+.vscode/
+.idea/
+*.suo
+*.user
+*.vcxproj*
+.qt/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Node
+node_modules/
+
+# Misc
+*.db
+*.sqlite
