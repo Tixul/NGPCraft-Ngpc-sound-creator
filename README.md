@@ -3,6 +3,14 @@
 NGPC Sound Creator is a C++/Qt tool to compose, preview, and export BGM/SFX for Neo Geo Pocket / Color.
 It includes a tracker workflow, instrument editor, SFX lab, project mode, and C/ASM export.
 
+<img width="1290" height="1035" alt="ngpc_sound_creator_Tracker" src="https://github.com/user-attachments/assets/fa01fccc-4de3-40dc-858f-4f486cc82d1a" />
+                               
+<img width="437" height="523" alt="ngpc_sound_creator_start" src="https://github.com/user-attachments/assets/bf12f722-7bb8-46e7-9159-a380677ced2c" />
+
+<img width="1289" height="1036" alt="ngpc_sound_creator_projet" src="https://github.com/user-attachments/assets/81c6fc2b-a8de-4ed8-b6c3-1d8051cbe6a3" />
+
+<img width="1292" height="1035" alt="ngpc_sound_creator_Instruments" src="https://github.com/user-attachments/assets/1fc793ed-1537-43c0-a59b-96b448d1b479" />
+
 ## What You Get
 
 - 4-channel tracker workflow (T0/T1/T2/Noise) with keyboard-first editing
