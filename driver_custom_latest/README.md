@@ -247,6 +247,3 @@ Notes:
 - No native DAC/PCM sample playback path in this PSG-focused driver.
 - No built-in VGM parser/player in runtime API (tool export pipeline is tracker/MIDI-oriented).
 
-**Provenance**
-- Runtime code in this folder is self-contained (`sounds.c/.h`) and does not include/link `vgmlib-ngpc` sources.
-- No VGM runtime parser/player from `vgmlib-ngpc` is embedded in this driver.
