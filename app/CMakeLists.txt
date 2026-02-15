@@ -1,0 +1,69 @@
+add_executable(ngpc_sound_creator
+    src/main.cpp
+    src/i18n/AppLanguage.h
+    src/i18n/AppLanguage.cpp
+    src/MainWindow.h
+    src/MainWindow.cpp
+    src/audio/AudioOutput.h
+    src/audio/AudioOutput.cpp
+    src/audio/EngineHub.h
+    src/audio/EngineHub.cpp
+    src/audio/PsgHelpers.h
+    src/audio/PsgHelpers.cpp
+    src/audio/InstrumentPlayer.h
+    src/audio/InstrumentPlayer.cpp
+    src/audio/TrackerPlaybackEngine.h
+    src/audio/TrackerPlaybackEngine.cpp
+    src/audio/WavExporter.h
+    src/audio/WavExporter.cpp
+    src/audio/MidiImporter.h
+    src/audio/MidiImporter.cpp
+    src/models/InstrumentStore.h
+    src/models/InstrumentStore.cpp
+    src/models/ProjectDocument.h
+    src/models/ProjectDocument.cpp
+    src/models/TrackerDocument.h
+    src/models/TrackerDocument.cpp
+    src/models/SongDocument.h
+    src/models/SongDocument.cpp
+    src/widgets/EnvelopeCurveWidget.h
+    src/widgets/EnvelopeCurveWidget.cpp
+    src/widgets/TrackerGridWidget.h
+    src/widgets/TrackerGridWidget.cpp
+    src/widgets/FxInputDialog.h
+    src/widgets/FxInputDialog.cpp
+    src/widgets/NoteInputDialog.h
+    src/widgets/NoteInputDialog.cpp
+    src/widgets/InstrumentInputDialog.h
+    src/widgets/InstrumentInputDialog.cpp
+    src/widgets/ProjectStartDialog.h
+    src/widgets/ProjectStartDialog.cpp
+    src/widgets/AttnInputDialog.h
+    src/widgets/AttnInputDialog.cpp
+    src/tabs/PlayerTab.h
+    src/tabs/PlayerTab.cpp
+    src/tabs/ProjectTab.h
+    src/tabs/ProjectTab.cpp
+    src/tabs/TrackerTab.h
+    src/tabs/TrackerTab.cpp
+    src/tabs/InstrumentTab.h
+    src/tabs/InstrumentTab.cpp
+    src/tabs/SfxLabTab.h
+    src/tabs/SfxLabTab.cpp
+    src/tabs/DebugTab.h
+    src/tabs/DebugTab.cpp
+    src/tabs/HelpTab.h
+    src/tabs/HelpTab.cpp
+)
+
+target_link_libraries(ngpc_sound_creator PRIVATE
+    Qt6::Widgets
+    Qt6::Multimedia
+    ngpc_sound_core
+)
+
+target_include_directories(ngpc_sound_creator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_features(ngpc_sound_creator PRIVATE cxx_std_17)

@@ -1,0 +1,2083 @@
+#include "tabs/TrackerTab.h"
+
+#include <QClipboard>
+#include <QComboBox>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGroupBox>
+#include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QTimer>
+#include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+
+#include "audio/EngineHub.h"
+#include "audio/PsgHelpers.h"
+#include "audio/TrackerPlaybackEngine.h"
+#include "audio/MidiImporter.h"
+#include "audio/WavExporter.h"
+#include "models/InstrumentStore.h"
+#include "models/SongDocument.h"
+#include "widgets/TrackerGridWidget.h"
+#include <QListWidget>
+#include "widgets/FxInputDialog.h"
+#include "widgets/NoteInputDialog.h"
+#include "widgets/InstrumentInputDialog.h"
+#include "widgets/AttnInputDialog.h"
+#include "ngpc/instrument.h"
+
+// ============================================================
+// Construction
+// ============================================================
+
+TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
+    : QWidget(parent), hub_(hub), store_(store)
+{
+    song_ = new SongDocument(this);
+    doc_ = song_->active_pattern();
+    grid_ = new TrackerGridWidget(doc_, this);
+
+    // Playback engine
+    engine_ = new TrackerPlaybackEngine(this);
+    engine_->set_document(doc_);
+    engine_->set_instrument_store(store_);
+
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(4, 4, 4, 4);
+    root->setSpacing(2);
+
+    // --- Top toolbar row 1: transport + pattern ---
+    auto* toolbar = new QHBoxLayout();
+    toolbar->setSpacing(4);
+
+    play_btn_ = new QPushButton("Play [Space]", this);
+    play_song_btn_ = new QPushButton("Song", this);
+    play_song_btn_->setToolTip("Play entire song (all patterns in order)");
+    loop_sel_btn_ = new QPushButton("Loop Sel", this);
+    loop_sel_btn_->setToolTip("Loop playback over selected rows (select rows first with Shift+arrows)");
+    stop_btn_ = new QPushButton("Stop [F8]", this);
+    toolbar->addWidget(play_btn_);
+    toolbar->addWidget(play_song_btn_);
+    toolbar->addWidget(loop_sel_btn_);
+    toolbar->addWidget(stop_btn_);
+
+    toolbar->addSpacing(8);
+
+    record_btn_ = new QPushButton("REC", this);
+    record_btn_->setCheckable(true);
+    record_btn_->setChecked(true);
+    record_btn_->setFixedWidth(40);
+    record_btn_->setToolTip("Record mode: when ON, keyboard keys write notes into the grid");
+    record_btn_->setStyleSheet(
+        "QPushButton:checked { background: #c03030; color: white; font-weight: bold; }");
+    toolbar->addWidget(record_btn_);
+
+    follow_btn_ = new QPushButton("Follow", this);
+    follow_btn_->setCheckable(true);
+    follow_btn_->setChecked(true);
+    follow_btn_->setToolTip("Follow playback position (cursor follows play row)");
+    toolbar->addWidget(follow_btn_);
+
+    clear_btn_ = new QPushButton("Clear", this);
+    clear_btn_->setToolTip("Clear all pattern data (Ctrl+Del)");
+    toolbar->addWidget(clear_btn_);
+
+    toolbar->addSpacing(12);
+
+    toolbar->addWidget(new QLabel("TPR:", this));
+    tpr_spin_ = new QSpinBox(this);
+    tpr_spin_->setRange(1, 32);
+    tpr_spin_->setValue(8);
+    tpr_spin_->setToolTip("Ticks per row (speed)");
+    toolbar->addWidget(tpr_spin_);
+
+    bpm_label_ = new QLabel(this);
+    bpm_label_->setToolTip("Estimated BPM (based on TPR and 60fps)");
+    bpm_label_->setFixedWidth(80);
+    toolbar->addWidget(bpm_label_);
+
+    toolbar->addWidget(new QLabel("Oct:", this));
+    octave_spin_ = new QSpinBox(this);
+    octave_spin_->setRange(0, 8);
+    octave_spin_->setValue(4);
+    octave_spin_->setToolTip("Base octave for keyboard (+/- numpad)");
+    toolbar->addWidget(octave_spin_);
+
+    toolbar->addWidget(new QLabel("Step:", this));
+    step_spin_ = new QSpinBox(this);
+    step_spin_->setRange(0, 16);
+    step_spin_->setValue(1);
+    step_spin_->setToolTip("Edit step (rows to advance after note)");
+    toolbar->addWidget(step_spin_);
+
+    toolbar->addSpacing(12);
+
+    toolbar->addWidget(new QLabel("Len:", this));
+    length_spin_ = new QSpinBox(this);
+    length_spin_->setRange(TrackerDocument::kMinLength, TrackerDocument::kMaxLength);
+    length_spin_->setValue(TrackerDocument::kDefaultLength);
+    length_spin_->setToolTip("Pattern length (rows)");
+    toolbar->addWidget(length_spin_);
+
+    toolbar->addSpacing(12);
+
+    toolbar->addWidget(new QLabel("KB:", this));
+    kb_layout_combo_ = new QComboBox(this);
+    kb_layout_combo_->addItem("QWERTY");
+    kb_layout_combo_->addItem("AZERTY");
+    kb_layout_combo_->setCurrentIndex(1);  // AZERTY default for French users
+    kb_layout_combo_->setToolTip("Keyboard layout for note input");
+    toolbar->addWidget(kb_layout_combo_);
+    grid_->set_key_layout(TrackerGridWidget::LayoutAZERTY);
+
+    toolbar->addStretch(1);
+
+    // File operations
+    save_btn_ = new QPushButton("Save", this);
+    save_btn_->setToolTip("Save song (.ngps) or pattern (.ngpat) (Ctrl+S)");
+    toolbar->addWidget(save_btn_);
+
+    load_btn_ = new QPushButton("Load", this);
+    load_btn_->setToolTip("Load song (.ngps) or pattern (.ngpat) (Ctrl+O)");
+    toolbar->addWidget(load_btn_);
+
+    export_mode_combo_ = new QComboBox(this);
+    export_mode_combo_->addItem("Pre-baked");
+    export_mode_combo_->addItem("Hybride");
+    export_mode_combo_->setToolTip("Pre-baked: fidélité parfaite (tick-by-tick)\nHybride: instruments driver, streams compacts");
+    toolbar->addWidget(export_mode_combo_);
+
+    export_btn_ = new QPushButton("Export C", this);
+    export_btn_->setToolTip("Export song as C source file");
+    toolbar->addWidget(export_btn_);
+
+    export_asm_btn_ = new QPushButton("ASM", this);
+    export_asm_btn_->setToolTip("Export song as ASM .inc file");
+    toolbar->addWidget(export_asm_btn_);
+
+    auto* wav_btn = new QPushButton("WAV", this);
+    wav_btn->setToolTip("Export song/pattern as WAV file");
+    toolbar->addWidget(wav_btn);
+
+    auto* midi_btn = new QPushButton("MIDI", this);
+    midi_btn->setToolTip("Import a MIDI file into the tracker");
+    toolbar->addWidget(midi_btn);
+
+    root->addLayout(toolbar);
+
+    // --- Mute / Solo row ---
+    auto* mute_row = new QHBoxLayout();
+    mute_row->setSpacing(2);
+    mute_row->addWidget(new QLabel("Mute:", this));
+
+    static const char* kChNames[4] = {"T0", "T1", "T2", "N"};
+    for (int ch = 0; ch < 4; ++ch) {
+        mute_btns_[ch] = new QPushButton(QString::fromLatin1(kChNames[ch]), this);
+        mute_btns_[ch]->setCheckable(true);
+        mute_btns_[ch]->setFixedWidth(36);
+        mute_btns_[ch]->setToolTip(QString("Mute channel %1 [F%2]").arg(ch).arg(ch + 1));
+        mute_row->addWidget(mute_btns_[ch]);
+    }
+
+    mute_row->addSpacing(8);
+    mute_row->addWidget(new QLabel("Solo:", this));
+
+    for (int ch = 0; ch < 4; ++ch) {
+        solo_btns_[ch] = new QPushButton(QString::fromLatin1(kChNames[ch]), this);
+        solo_btns_[ch]->setCheckable(true);
+        solo_btns_[ch]->setFixedWidth(36);
+        solo_btns_[ch]->setToolTip(QString("Solo channel %1").arg(ch));
+        mute_row->addWidget(solo_btns_[ch]);
+    }
+
+    mute_row->addStretch(1);
+    root->addLayout(mute_row);
+
+    // --- Pattern / Order row ---
+    auto* pat_order_row = new QHBoxLayout();
+    pat_order_row->setSpacing(4);
+
+    pat_order_row->addWidget(new QLabel("Pat:", this));
+    pattern_spin_ = new QSpinBox(this);
+    pattern_spin_->setRange(0, 0);  // updated by refresh_pattern_ui
+    pattern_spin_->setValue(0);
+    pattern_spin_->setToolTip("Current pattern index");
+    pattern_spin_->setFixedWidth(50);
+    pat_order_row->addWidget(pattern_spin_);
+
+    pattern_count_label_ = new QLabel("/1", this);
+    pattern_count_label_->setFixedWidth(24);
+    pat_order_row->addWidget(pattern_count_label_);
+
+    pat_add_btn_ = new QPushButton("+", this);
+    pat_add_btn_->setFixedWidth(28);
+    pat_add_btn_->setToolTip("Add new empty pattern");
+    pat_order_row->addWidget(pat_add_btn_);
+
+    pat_clone_btn_ = new QPushButton("Cln", this);
+    pat_clone_btn_->setFixedWidth(32);
+    pat_clone_btn_->setToolTip("Clone current pattern");
+    pat_order_row->addWidget(pat_clone_btn_);
+
+    pat_del_btn_ = new QPushButton("-", this);
+    pat_del_btn_->setFixedWidth(28);
+    pat_del_btn_->setToolTip("Delete current pattern");
+    pat_order_row->addWidget(pat_del_btn_);
+
+    pat_order_row->addSpacing(12);
+
+    pat_order_row->addWidget(new QLabel("Order:", this));
+    order_list_ = new QListWidget(this);
+    order_list_->setFlow(QListView::LeftToRight);
+    order_list_->setMaximumHeight(28);
+    order_list_->setMinimumWidth(200);
+    order_list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    order_list_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    order_list_->setStyleSheet(
+        "QListWidget { background: #1e1e2a; color: #ccccdd; font-family: 'Consolas', monospace;"
+        " font-size: 12px; border: 1px solid #333; }"
+        "QListWidget::item { padding: 2px 6px; }"
+        "QListWidget::item:selected { background: #4060a0; }");
+    pat_order_row->addWidget(order_list_);
+
+    ord_add_btn_ = new QPushButton("+O", this);
+    ord_add_btn_->setFixedWidth(28);
+    ord_add_btn_->setToolTip("Add current pattern to order list");
+    pat_order_row->addWidget(ord_add_btn_);
+
+    ord_del_btn_ = new QPushButton("-O", this);
+    ord_del_btn_->setFixedWidth(28);
+    ord_del_btn_->setToolTip("Remove selected entry from order");
+    pat_order_row->addWidget(ord_del_btn_);
+
+    ord_up_btn_ = new QPushButton("<", this);
+    ord_up_btn_->setFixedWidth(24);
+    ord_up_btn_->setToolTip("Move order entry up");
+    pat_order_row->addWidget(ord_up_btn_);
+
+    ord_down_btn_ = new QPushButton(">", this);
+    ord_down_btn_->setFixedWidth(24);
+    ord_down_btn_->setToolTip("Move order entry down");
+    pat_order_row->addWidget(ord_down_btn_);
+
+    loop_btn_ = new QPushButton("Loop", this);
+    loop_btn_->setFixedWidth(40);
+    loop_btn_->setToolTip("Set loop point at selected order position");
+    pat_order_row->addWidget(loop_btn_);
+
+    pat_order_row->addStretch(1);
+    root->addLayout(pat_order_row);
+
+    // --- Keyboard reference ---
+    kb_ref_label_ = new QLabel(this);
+    kb_ref_label_->setStyleSheet(
+        "QLabel { background: #1e1e2a; color: #bbbbcc; padding: 3px 8px;"
+        " font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;"
+        " border: 1px solid #333; border-radius: 3px; }");
+    root->addWidget(kb_ref_label_);
+    update_kb_ref_label();
+
+    // --- Grid ---
+    root->addWidget(grid_, 1);
+
+    // --- Status bar ---
+    status_label_ = new QLabel(this);
+    status_label_->setStyleSheet(
+        "QLabel { background: #1a1a24; color: #aaaaaa; padding: 2px 8px;"
+        " font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;"
+        " border-top: 1px solid #333; }");
+    status_label_->setText("Row 00  Ch 0  --  |  Instrument: ---");
+    root->addWidget(status_label_);
+
+    // --- Log ---
+    log_ = new QPlainTextEdit(this);
+    log_->setReadOnly(true);
+    log_->setMaximumHeight(50);
+    log_->setPlaceholderText("Tracker log...");
+    root->addWidget(log_);
+
+    // --- Play timer (60 fps) ---
+    play_timer_ = new QTimer(this);
+    play_timer_->setInterval(1000 / 60);
+
+    // Initial BPM label
+    update_bpm_label();
+
+    // === Connections ===
+
+    // Transport
+    connect(play_btn_, &QPushButton::clicked, this, [this]() {
+        if (playing_) stop_playback(); else start_playback();
+    });
+    connect(stop_btn_, &QPushButton::clicked, this, &TrackerTab::stop_playback);
+    connect(play_song_btn_, &QPushButton::clicked, this, &TrackerTab::start_song_playback);
+    connect(loop_sel_btn_, &QPushButton::clicked, this, &TrackerTab::start_loop_selection);
+
+    // Record mode
+    connect(record_btn_, &QPushButton::toggled, this, [this](bool checked) {
+        grid_->set_record_mode(checked);
+    });
+
+    // Follow mode
+    connect(follow_btn_, &QPushButton::toggled, this, [this](bool checked) {
+        follow_mode_ = checked;
+    });
+
+    // Clear pattern
+    connect(clear_btn_, &QPushButton::clicked, this, [this]() {
+        doc_->push_undo();
+        doc_->clear_all();
+        append_log("Pattern cleared.");
+    });
+
+    // Pattern length
+    connect(length_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        doc_->set_length(val);
+        append_log(QString("Pattern length: %1 rows").arg(val));
+    });
+
+    // Octave / step sync to grid
+    connect(octave_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        grid_->set_octave(val);
+        update_kb_ref_label();
+    });
+    connect(step_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        grid_->set_edit_step(val);
+    });
+
+    // TPR -> engine + BPM update
+    connect(tpr_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        engine_->set_ticks_per_row(val);
+        update_bpm_label();
+    });
+
+    // Engine speed_changed (from Bxx effect) -> sync TPR spin
+    connect(engine_, &TrackerPlaybackEngine::speed_changed, this, [this](int tpr) {
+        tpr_spin_->blockSignals(true);
+        tpr_spin_->setValue(tpr);
+        tpr_spin_->blockSignals(false);
+        update_bpm_label();
+    });
+
+    // Engine row_changed -> update grid playback row + follow mode
+    connect(engine_, &TrackerPlaybackEngine::row_changed, this, [this](int row) {
+        grid_->set_playback_row(row);
+        if (follow_mode_) {
+            grid_->set_cursor(grid_->cursor_ch(), row, grid_->cursor_sub());
+            grid_->ensure_row_visible(row);
+        }
+    });
+
+    // Engine pattern_finished -> song mode or loop
+    connect(engine_, &TrackerPlaybackEngine::pattern_finished, this,
+            &TrackerTab::on_pattern_finished);
+
+    // --- Pattern / Order UI connections ---
+
+    // Pattern selector
+    connect(pattern_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        switch_to_pattern(val);
+    });
+
+    // Pattern bank buttons
+    connect(pat_add_btn_, &QPushButton::clicked, this, [this]() {
+        int idx = song_->add_pattern();
+        if (idx >= 0) {
+            refresh_pattern_ui();
+            switch_to_pattern(idx);
+            append_log(QString("Added pattern %1").arg(idx));
+        }
+    });
+    connect(pat_clone_btn_, &QPushButton::clicked, this, [this]() {
+        int idx = song_->clone_pattern(song_->active_pattern_index());
+        if (idx >= 0) {
+            refresh_pattern_ui();
+            switch_to_pattern(idx);
+            append_log(QString("Cloned pattern to %1").arg(idx));
+        }
+    });
+    connect(pat_del_btn_, &QPushButton::clicked, this, [this]() {
+        if (song_->pattern_count() <= 1) {
+            append_log("Cannot delete the last pattern.");
+            return;
+        }
+        int old = song_->active_pattern_index();
+        song_->remove_pattern(old);
+        refresh_pattern_ui();
+        switch_to_pattern(song_->active_pattern_index());
+        refresh_order_list();
+        append_log(QString("Deleted pattern %1").arg(old));
+    });
+
+    // Order list: double-click to jump to that pattern
+    connect(order_list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) {
+        int row = order_list_->currentRow();
+        if (row < 0 || row >= song_->order_length()) return;
+        const auto& ord = song_->order();
+        switch_to_pattern(ord[static_cast<size_t>(row)]);
+    });
+
+    // Order buttons
+    connect(ord_add_btn_, &QPushButton::clicked, this, [this]() {
+        int pos = order_list_->currentRow();
+        if (pos < 0) pos = song_->order_length();
+        else pos++;
+        song_->order_insert(pos, song_->active_pattern_index());
+        refresh_order_list();
+        order_list_->setCurrentRow(pos);
+        append_log(QString("Order: inserted Pat %1 at pos %2")
+            .arg(song_->active_pattern_index()).arg(pos));
+    });
+    connect(ord_del_btn_, &QPushButton::clicked, this, [this]() {
+        int pos = order_list_->currentRow();
+        if (pos < 0) return;
+        song_->order_remove(pos);
+        refresh_order_list();
+    });
+    connect(ord_up_btn_, &QPushButton::clicked, this, [this]() {
+        int pos = order_list_->currentRow();
+        if (pos <= 0) return;
+        song_->order_move_up(pos);
+        refresh_order_list();
+        order_list_->setCurrentRow(pos - 1);
+    });
+    connect(ord_down_btn_, &QPushButton::clicked, this, [this]() {
+        int pos = order_list_->currentRow();
+        if (pos < 0 || pos >= song_->order_length() - 1) return;
+        song_->order_move_down(pos);
+        refresh_order_list();
+        order_list_->setCurrentRow(pos + 1);
+    });
+    connect(loop_btn_, &QPushButton::clicked, this, [this]() {
+        int pos = order_list_->currentRow();
+        if (pos < 0) pos = 0;
+        song_->set_loop_point(pos);
+        refresh_order_list();
+        append_log(QString("Loop point set at order position %1").arg(pos));
+    });
+
+    // SongDocument signals
+    connect(song_, &SongDocument::pattern_list_changed, this, [this]() {
+        refresh_pattern_ui();
+    });
+    connect(song_, &SongDocument::order_changed, this, [this]() {
+        refresh_order_list();
+    });
+
+    // Initial UI state
+    refresh_pattern_ui();
+    refresh_order_list();
+
+    // Keyboard layout
+    connect(kb_layout_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        auto layout = (idx == 1) ? TrackerGridWidget::LayoutAZERTY
+                                 : TrackerGridWidget::LayoutQWERTY;
+        grid_->set_key_layout(layout);
+        update_kb_ref_label();
+    });
+
+    // Grid signals -> edit handlers
+    connect(grid_, &TrackerGridWidget::note_entered, this, &TrackerTab::on_note_entered);
+    connect(grid_, &TrackerGridWidget::note_preview_requested, this, [this](int ch, uint8_t note) {
+        preview_note(note, ch);
+    });
+    connect(grid_, &TrackerGridWidget::note_off_entered, this, &TrackerTab::on_note_off_entered);
+    connect(grid_, &TrackerGridWidget::cell_cleared, this, &TrackerTab::on_cell_cleared);
+    connect(grid_, &TrackerGridWidget::instrument_digit, this, &TrackerTab::on_instrument_digit);
+    connect(grid_, &TrackerGridWidget::attn_digit, this, &TrackerTab::on_attn_digit);
+    connect(grid_, &TrackerGridWidget::fx_digit, this, &TrackerTab::on_fx_digit);
+    connect(grid_, &TrackerGridWidget::fx_dialog_requested, this, [this](int ch, int row) {
+        const auto& c = doc_->cell(ch, row);
+        FxInputDialog dlg(c.fx, c.fx_param, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            doc_->push_undo();
+            doc_->set_fx(ch, row, dlg.fx());
+            doc_->set_fx_param(ch, row, dlg.fx_param());
+            grid_->update();
+            update_status_label();
+            uint8_t f = dlg.fx();
+            uint8_t p = dlg.fx_param();
+            if (f == 0 && p == 0) {
+                append_log(QString("FX cleared at Ch%1 Row %2").arg(ch).arg(row));
+            } else {
+                append_log(QString("FX set at Ch%1 Row %2: %3%4")
+                    .arg(ch).arg(row)
+                    .arg(f, 1, 16, QChar('0'))
+                    .arg(p, 2, 16, QChar('0'))
+                    .toUpper());
+            }
+        }
+    });
+    // Note dialog (Enter / double-click on Note column)
+    connect(grid_, &TrackerGridWidget::note_dialog_requested, this, [this](int ch, int row) {
+        const auto& c = doc_->cell(ch, row);
+        bool is_noise = (ch == 3);
+        NoteInputDialog dlg(c.note, is_noise, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            uint8_t n = dlg.note();
+            doc_->push_undo();
+            if (n == 0) {
+                doc_->clear_cell(ch, row);
+                append_log(QString("Note cleared at Ch%1 Row %2").arg(ch).arg(row));
+            } else {
+                doc_->set_note(ch, row, n);
+                append_log(QString("Note set at Ch%1 Row %2").arg(ch).arg(row));
+            }
+            grid_->update();
+            update_status_label();
+        }
+    });
+
+    // Instrument dialog (Enter / double-click on Inst column)
+    connect(grid_, &TrackerGridWidget::instrument_dialog_requested, this, [this](int ch, int row) {
+        const auto& c = doc_->cell(ch, row);
+        QStringList names;
+        for (int i = 0; i <= TrackerDocument::kMaxInstrument; ++i) {
+            if (store_ && i < store_->count()) {
+                names << QString::fromStdString(store_->at(i).name);
+            } else {
+                names << "";
+            }
+        }
+        InstrumentInputDialog dlg(c.instrument, names, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            doc_->push_undo();
+            doc_->set_instrument(ch, row, dlg.instrument());
+            grid_->update();
+            update_status_label();
+            append_log(QString("Instrument set to %1 at Ch%2 Row %3")
+                .arg(dlg.instrument(), 2, 16, QChar('0')).toUpper()
+                .arg(ch).arg(row));
+        }
+    });
+
+    // Attenuation dialog (Enter / double-click on Attn column)
+    connect(grid_, &TrackerGridWidget::attn_dialog_requested, this, [this](int ch, int row) {
+        const auto& c = doc_->cell(ch, row);
+        AttnInputDialog dlg(c.attn, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            doc_->push_undo();
+            doc_->set_attn(ch, row, dlg.attn());
+            grid_->update();
+            update_status_label();
+            uint8_t a = dlg.attn();
+            if (a == 0xFF) {
+                append_log(QString("Attn set to AUTO at Ch%1 Row %2").arg(ch).arg(row));
+            } else {
+                append_log(QString("Attn set to %1 at Ch%2 Row %3").arg(a).arg(ch).arg(row));
+            }
+        }
+    });
+
+    connect(grid_, &TrackerGridWidget::play_stop_toggled, this, [this]() {
+        if (playing_) stop_playback(); else start_playback();
+    });
+
+    // Undo/Redo
+    connect(grid_, &TrackerGridWidget::undo_requested, this, [this]() {
+        doc_->undo();
+        grid_->update();
+    });
+    connect(grid_, &TrackerGridWidget::redo_requested, this, [this]() {
+        doc_->redo();
+        grid_->update();
+    });
+
+    // Copy/Cut/Paste
+    connect(grid_, &TrackerGridWidget::copy_requested, this, [this]() {
+        int start = grid_->cursor_row();
+        int end = start;
+        if (grid_->has_selection()) {
+            start = grid_->sel_start_row();
+            end = grid_->sel_end_row();
+        }
+        doc_->copy(grid_->cursor_ch(), start, end, clipboard_);
+        int count = end - start + 1;
+        append_log(QString("Copied %1 row(s) from Ch%2").arg(count).arg(grid_->cursor_ch()));
+    });
+    connect(grid_, &TrackerGridWidget::cut_requested, this, [this]() {
+        int start = grid_->cursor_row();
+        int end = start;
+        if (grid_->has_selection()) {
+            start = grid_->sel_start_row();
+            end = grid_->sel_end_row();
+        }
+        doc_->cut(grid_->cursor_ch(), start, end, clipboard_);
+        grid_->clear_selection();
+        grid_->update();
+        int count = end - start + 1;
+        append_log(QString("Cut %1 row(s) from Ch%2").arg(count).arg(grid_->cursor_ch()));
+    });
+    connect(grid_, &TrackerGridWidget::paste_requested, this, [this]() {
+        if (clipboard_.row_count() == 0) return;
+        doc_->paste(grid_->cursor_ch(), grid_->cursor_row(), clipboard_);
+        grid_->update();
+        append_log(QString("Pasted %1 row(s)").arg(clipboard_.row_count()));
+    });
+
+    // Select all
+    connect(grid_, &TrackerGridWidget::select_all_requested, this, [this]() {
+        grid_->select_all();
+    });
+
+    // Transpose
+    connect(grid_, &TrackerGridWidget::transpose_requested, this, [this](int semitones) {
+        int start = grid_->cursor_row();
+        int end = start;
+        if (grid_->has_selection()) {
+            start = grid_->sel_start_row();
+            end = grid_->sel_end_row();
+        }
+        doc_->transpose(grid_->cursor_ch(), start, end, semitones);
+        grid_->update();
+        QString dir = (semitones > 0) ? "+" : "";
+        append_log(QString("Transpose %1%2 semitones").arg(dir).arg(semitones));
+    });
+
+    // Transport shortcuts from grid
+    connect(grid_, &TrackerGridWidget::play_from_start_requested, this, [this]() {
+        start_playback_from_start();
+    });
+    connect(grid_, &TrackerGridWidget::stop_requested, this, [this]() {
+        stop_playback();
+    });
+    connect(grid_, &TrackerGridWidget::clear_pattern_requested, this, [this]() {
+        doc_->push_undo();
+        doc_->clear_all();
+        grid_->update();
+        append_log("Pattern cleared.");
+    });
+
+    // Row operations
+    connect(grid_, &TrackerGridWidget::insert_row_requested, this, [this]() {
+        doc_->insert_row_all(grid_->cursor_row());
+        grid_->update();
+        append_log(QString("Inserted row at %1").arg(grid_->cursor_row()));
+    });
+    connect(grid_, &TrackerGridWidget::delete_row_requested, this, [this]() {
+        doc_->delete_row_all(grid_->cursor_row());
+        grid_->update();
+        append_log(QString("Deleted row %1").arg(grid_->cursor_row()));
+    });
+    connect(grid_, &TrackerGridWidget::duplicate_row_requested, this, [this]() {
+        doc_->duplicate_row(grid_->cursor_ch(), grid_->cursor_row());
+        grid_->move_cursor(1, 0, 0);
+        grid_->update();
+        append_log("Row duplicated.");
+    });
+
+    // Interpolation
+    connect(grid_, &TrackerGridWidget::interpolate_requested, this, [this]() {
+        if (!grid_->has_selection()) {
+            append_log("Select a range first (Shift+arrows).");
+            return;
+        }
+        doc_->interpolate_attn(grid_->cursor_ch(), grid_->sel_start_row(), grid_->sel_end_row());
+        grid_->update();
+        append_log(QString("Interpolated attn on Ch%1, rows %2-%3")
+                       .arg(grid_->cursor_ch())
+                       .arg(grid_->sel_start_row())
+                       .arg(grid_->sel_end_row()));
+    });
+
+    // Channel header click -> toggle mute
+    connect(grid_, &TrackerGridWidget::channel_header_clicked, this, [this](int ch) {
+        if (ch >= 0 && ch < 4) {
+            mute_btns_[ch]->toggle();
+        }
+    });
+
+    // Cursor moved -> update status bar
+    connect(grid_, &TrackerGridWidget::cursor_moved, this, [this](int, int) {
+        update_status_label();
+    });
+
+    // Mute buttons
+    for (int ch = 0; ch < 4; ++ch) {
+        connect(mute_btns_[ch], &QPushButton::toggled, this, [this, ch](bool checked) {
+            (void)checked;
+            if (solo_channel_ == ch) {
+                solo_channel_ = -1;
+                solo_btns_[ch]->setChecked(false);
+            }
+            update_mute_state();
+        });
+    }
+
+    // Solo buttons (exclusive)
+    for (int ch = 0; ch < 4; ++ch) {
+        connect(solo_btns_[ch], &QPushButton::toggled, this, [this, ch](bool checked) {
+            if (checked) {
+                solo_channel_ = ch;
+                for (int i = 0; i < 4; ++i) {
+                    if (i != ch) solo_btns_[i]->setChecked(false);
+                }
+            } else {
+                if (solo_channel_ == ch) solo_channel_ = -1;
+            }
+            update_mute_state();
+        });
+    }
+
+    // Playback timer
+    connect(play_timer_, &QTimer::timeout, this, &TrackerTab::on_tick);
+
+    // File operations (buttons)
+    connect(save_btn_, &QPushButton::clicked, this, &TrackerTab::on_save);
+    connect(load_btn_, &QPushButton::clicked, this, &TrackerTab::on_load);
+    connect(export_btn_, &QPushButton::clicked, this, &TrackerTab::on_export);
+    connect(export_asm_btn_, &QPushButton::clicked, this, &TrackerTab::on_export_asm);
+
+    // WAV export
+    connect(wav_btn, &QPushButton::clicked, this, [this]() {
+        QString path = QFileDialog::getSaveFileName(this, "Export WAV",
+                                                     QString(), "WAV Audio (*.wav)");
+        if (path.isEmpty()) return;
+
+        WavExporter::Settings ws;
+        ws.sample_rate = 44100;
+        ws.ticks_per_row = tpr_spin_->value();
+        ws.song_mode = (song_->order_length() > 1 || song_->pattern_count() > 1);
+        ws.max_loops = 1;
+
+        append_log("Exporting WAV...");
+        QString err;
+        if (WavExporter::render_to_file(path, song_, store_, ws, &err)) {
+            append_log(QString("WAV exported to %1").arg(path));
+        } else {
+            append_log(QString("ERROR WAV export: %1").arg(err));
+        }
+    });
+
+    // MIDI import
+    connect(midi_btn, &QPushButton::clicked, this, &TrackerTab::on_import_midi);
+
+    // File operations (keyboard shortcuts from grid)
+    connect(grid_, &TrackerGridWidget::save_requested, this, &TrackerTab::on_save);
+    connect(grid_, &TrackerGridWidget::load_requested, this, &TrackerTab::on_load);
+
+    // Octave / step change from grid (numpad +/- and */)
+    connect(grid_, &TrackerGridWidget::octave_change_requested, this, [this](int delta) {
+        octave_spin_->setValue(octave_spin_->value() + delta);
+    });
+    connect(grid_, &TrackerGridWidget::step_change_requested, this, [this](int delta) {
+        step_spin_->setValue(step_spin_->value() + delta);
+    });
+
+    // Copy pattern as text to system clipboard
+    connect(grid_, &TrackerGridWidget::copy_text_requested, this, [this]() {
+        QString text = grid_->selection_to_text();
+        QGuiApplication::clipboard()->setText(text);
+        append_log(QString("Copied pattern text to clipboard (%1 chars).").arg(text.size()));
+    });
+
+    append_log("Tracker ready. Multi-pattern + Song mode. [Song]=play order, [WAV]=export audio. F1-F4=mute.");
+}
+
+// ============================================================
+// Keyboard reference
+// ============================================================
+
+void TrackerTab::update_kb_ref_label() {
+    int oct = octave_spin_ ? octave_spin_->value() : 4;
+    bool azerty = (kb_layout_combo_ && kb_layout_combo_->currentIndex() == 1);
+
+    QString lo_keys, hi_keys;
+    if (azerty) {
+        lo_keys = QString(
+            "W=C%1  X=C#  C=D%1  D=D#  V=E%1  B=F%1  G=F#  N=G%1  H=G#  ,=A%1  J=A#  ;=B%1"
+        ).arg(oct);
+        hi_keys = QString(
+            "A=C%1  2=C#  Z=D%1  3=D#  E=E%1  R=F%1  5=F#  T=G%1  6=G#  Y=A%1  7=A#  U=B%1"
+        ).arg(oct + 1);
+    } else {
+        lo_keys = QString(
+            "Z=C%1  S=C#  X=D%1  D=D#  C=E%1  V=F%1  G=F#  B=G%1  H=G#  N=A%1  J=A#  M=B%1"
+        ).arg(oct);
+        hi_keys = QString(
+            "Q=C%1  2=C#  W=D%1  3=D#  E=E%1  R=F%1  5=F#  T=G%1  6=G#  Y=A%1  7=A#  U=B%1"
+        ).arg(oct + 1);
+    }
+
+    kb_ref_label_->setText(
+        QString("Oct %1: %2\n"
+                "Oct %3: %4    |  Ins=insert  Shift+Del=delete  Ctrl+D=dup  Ctrl+I=interpolate  Ctrl+X=cut")
+            .arg(oct).arg(lo_keys).arg(oct + 1).arg(hi_keys));
+}
+
+// ============================================================
+// Status bar
+// ============================================================
+
+void TrackerTab::update_status_label() {
+    if (!status_label_ || !grid_ || !doc_) return;
+
+    int row = grid_->cursor_row();
+    int ch = grid_->cursor_ch();
+    const auto& c = doc_->cell(ch, row);
+
+    // Note name
+    QString note_str = "---";
+    if (c.is_note_off()) {
+        note_str = "OFF";
+    } else if (c.is_note_on()) {
+        static const char* names[] = {"C-","C#","D-","D#","E-","F-","F#","G-","G#","A-","A#","B-"};
+        const int n = c.note - 1; // tracker note ids are 1-based
+        int oct_val = n / 12;
+        int semi = n % 12;
+        note_str = QString("%1%2").arg(names[semi]).arg(oct_val);
+    }
+
+    // Instrument name
+    QString inst_str = "---";
+    if (c.is_note_on() || c.instrument != 0) {
+        inst_str = QString("%1").arg(c.instrument, 2, 16, QChar('0')).toUpper();
+        if (store_ && c.instrument < store_->count()) {
+            inst_str += QString(" (%1)").arg(
+                QString::fromStdString(store_->at(c.instrument).name));
+        }
+    }
+
+    // Attn
+    QString attn_str = "-";
+    if (c.attn != 0xFF) {
+        attn_str = QString("%1").arg(c.attn, 1, 16).toUpper();
+    }
+
+    // FX
+    QString fx_str = "---";
+    if (c.has_fx()) {
+        static const char* kFxNames[] = {
+            "Arp", "PitchUp", "PitchDn", "Porta",
+            "???", "???", "???", "???",
+            "???", "???", "VolSlide", "SetSpeed",
+            "NoteCut", "NoteDelay", "???", "???"
+        };
+        fx_str = QString("%1%2 (%3)")
+            .arg(c.fx, 1, 16, QChar('0')).toUpper()
+            .arg(c.fx_param, 2, 16, QChar('0')).toUpper()
+            .arg(QString::fromLatin1(kFxNames[c.fx & 0x0F]));
+    }
+
+    // Selection info
+    QString sel_str;
+    if (grid_->has_selection()) {
+        int count = grid_->sel_end_row() - grid_->sel_start_row() + 1;
+        sel_str = QString("  Sel: %1 rows").arg(count);
+    }
+
+    QString pat_str = QString("Pat %1/%2")
+        .arg(song_ ? song_->active_pattern_index() : 0)
+        .arg(song_ ? song_->pattern_count() : 1);
+
+    status_label_->setText(
+        QString("%1  Row %2  Ch %3  Note: %4  Inst: %5  Attn: %6  FX: %7%8")
+            .arg(pat_str)
+            .arg(row, 2, 16, QChar('0')).toUpper()
+            .arg(ch)
+            .arg(note_str)
+            .arg(inst_str)
+            .arg(attn_str)
+            .arg(fx_str)
+            .arg(sel_str));
+}
+
+// ============================================================
+// BPM display
+// ============================================================
+
+void TrackerTab::update_bpm_label() {
+    if (!bpm_label_ || !tpr_spin_) return;
+    int tpr = tpr_spin_->value();
+    double rows_per_sec = 60.0 / tpr;
+    double bpm = rows_per_sec / 4.0 * 60.0;
+    bpm_label_->setText(QString("~%1 BPM").arg(static_cast<int>(bpm + 0.5)));
+}
+
+// ============================================================
+// Playback (delegates to TrackerPlaybackEngine)
+// ============================================================
+
+void TrackerTab::start_playback() {
+    if (playing_) return;
+
+    if (hub_) hub_->set_step_z80(false);
+
+    if (!hub_ || !hub_->ensure_audio_running(44100)) {
+        append_log("ERROR: Audio engine not ready.");
+        return;
+    }
+
+    song_mode_ = false;
+    playing_ = true;
+    engine_->set_document(doc_);
+    engine_->set_ticks_per_row(tpr_spin_->value());
+    engine_->start(grid_->cursor_row());
+    grid_->set_playback_row(engine_->current_row());
+
+    play_btn_->setText("Pause [Space]");
+    play_timer_->start();
+}
+
+void TrackerTab::start_playback_from_start() {
+    stop_playback();
+
+    if (hub_) hub_->set_step_z80(false);
+
+    if (!hub_ || !hub_->ensure_audio_running(44100)) {
+        append_log("ERROR: Audio engine not ready.");
+        return;
+    }
+
+    song_mode_ = false;
+    playing_ = true;
+    engine_->set_document(doc_);
+    engine_->set_ticks_per_row(tpr_spin_->value());
+    engine_->start(0);
+    grid_->set_playback_row(0);
+
+    play_btn_->setText("Pause [Space]");
+    play_timer_->start();
+}
+
+void TrackerTab::start_loop_selection() {
+    if (!grid_->has_selection()) {
+        append_log("Select rows first (Shift+Up/Down) to loop.");
+        return;
+    }
+
+    stop_playback();
+
+    if (hub_) hub_->set_step_z80(false);
+    if (!hub_ || !hub_->ensure_audio_running(44100)) {
+        append_log("ERROR: Audio engine not ready.");
+        return;
+    }
+
+    int sel_start = grid_->sel_start_row();
+    int sel_end = grid_->sel_end_row();
+
+    song_mode_ = false;
+    playing_ = true;
+    engine_->set_document(doc_);
+    engine_->set_ticks_per_row(tpr_spin_->value());
+    engine_->set_loop_range(sel_start, sel_end);
+    engine_->start(sel_start);
+    grid_->set_playback_row(sel_start);
+
+    play_btn_->setText("Pause [Space]");
+    play_timer_->start();
+    append_log(QString("Looping rows %1-%2").arg(sel_start).arg(sel_end));
+}
+
+void TrackerTab::stop_playback() {
+    if (!playing_) return;
+    play_timer_->stop();
+    playing_ = false;
+    song_mode_ = false;
+    engine_->clear_loop_range();
+    engine_->stop();
+    silence_all();
+    grid_->set_playback_row(-1);
+    play_btn_->setText("Play [Space]");
+
+    // Restore engine to current editing pattern
+    engine_->set_document(doc_);
+}
+
+void TrackerTab::on_tick() {
+    if (!playing_ || !hub_ || !hub_->engine_ready()) {
+        stop_playback();
+        return;
+    }
+
+    engine_->tick();
+    write_voices_to_psg();
+}
+
+void TrackerTab::write_voices_to_psg() {
+    if (!hub_ || !hub_->engine_ready()) return;
+
+    for (int ch = 0; ch < 4; ++ch) {
+        bool muted = false;
+        if (solo_channel_ >= 0) {
+            muted = (ch != solo_channel_);
+        } else {
+            muted = mute_btns_[ch]->isChecked() || grid_->is_channel_muted(ch);
+        }
+
+        auto out = engine_->channel_output(ch);
+
+        if (muted || !out.active) {
+            if (ch < 3) {
+                psg_helpers::DirectSilenceTone(hub_->engine(), ch);
+            } else {
+                psg_helpers::DirectSilenceNoise(hub_->engine());
+            }
+            continue;
+        }
+
+        if (ch < 3) {
+            psg_helpers::DirectToneCh(hub_->engine(), ch, out.divider, out.attn);
+        } else {
+            auto nc = TrackerPlaybackEngine::decode_noise_val(out.noise_val);
+            psg_helpers::DirectNoise(hub_->engine(), nc.rate, nc.type, out.attn);
+        }
+    }
+}
+
+void TrackerTab::silence_all() {
+    if (!hub_ || !hub_->engine_ready()) return;
+    for (int ch = 0; ch < 3; ++ch) {
+        psg_helpers::DirectSilenceTone(hub_->engine(), ch);
+    }
+    psg_helpers::DirectSilenceNoise(hub_->engine());
+}
+
+void TrackerTab::update_mute_state() {
+    bool channel_muted[4] = {};
+
+    if (solo_channel_ >= 0) {
+        for (int i = 0; i < 4; ++i) {
+            channel_muted[i] = (i != solo_channel_);
+        }
+    } else {
+        for (int i = 0; i < 4; ++i) {
+            channel_muted[i] = mute_btns_[i]->isChecked();
+        }
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        grid_->set_channel_muted(i, channel_muted[i]);
+    }
+}
+
+// ============================================================
+// Edit signal handlers
+// ============================================================
+
+void TrackerTab::on_note_entered(int ch, int row, uint8_t note) {
+    doc_->push_undo();
+    TrackerCell c = doc_->cell(ch, row);
+    c.note = note;
+    doc_->set_cell(ch, row, c);
+    update_status_label();
+
+    // Preview note
+    preview_note(note, ch);
+}
+
+void TrackerTab::on_note_off_entered(int ch, int row) {
+    doc_->push_undo();
+    doc_->set_note(ch, row, 0xFF);
+    update_status_label();
+}
+
+void TrackerTab::on_cell_cleared(int ch, int row) {
+    doc_->push_undo();
+    doc_->clear_cell(ch, row);
+    update_status_label();
+}
+
+void TrackerTab::on_instrument_digit(int ch, int row, int hex_digit) {
+    const auto& c = doc_->cell(ch, row);
+    if (!c.is_note_on()) return;
+    doc_->push_undo();
+    uint8_t inst = static_cast<uint8_t>(((c.instrument & 0x0F) << 4) | (hex_digit & 0x0F));
+    inst = std::min<uint8_t>(inst, TrackerDocument::kMaxInstrument);
+    doc_->set_instrument(ch, row, inst);
+    update_status_label();
+}
+
+void TrackerTab::on_attn_digit(int ch, int row, int hex_digit) {
+    const auto& c = doc_->cell(ch, row);
+    if (!c.is_note_on()) return;
+    doc_->push_undo();
+    doc_->set_attn(ch, row, static_cast<uint8_t>(hex_digit & 0x0F));
+    update_status_label();
+}
+
+void TrackerTab::on_fx_digit(int ch, int row, int col_index, int hex_digit) {
+    doc_->push_undo();
+    const auto& c = doc_->cell(ch, row);
+    if (col_index == 0) {
+        doc_->set_fx(ch, row, static_cast<uint8_t>(hex_digit & 0x0F));
+    } else {
+        uint8_t param = static_cast<uint8_t>(((c.fx_param & 0x0F) << 4) | (hex_digit & 0x0F));
+        doc_->set_fx_param(ch, row, param);
+    }
+    update_status_label();
+}
+
+// ============================================================
+// Note preview
+// ============================================================
+
+void TrackerTab::preview_note(uint8_t midi_note, int ch) {
+    if (!hub_ || playing_) return;
+
+    hub_->set_step_z80(false);
+    if (!hub_->ensure_audio_running(44100)) return;
+
+    uint16_t divider = TrackerPlaybackEngine::midi_to_divider(midi_note);
+
+    const auto& cell = doc_->cell(ch, grid_->cursor_row());
+    uint8_t attn = 0;
+    if (cell.attn != 0xFF) attn = cell.attn;
+
+    if (ch < 3) {
+        psg_helpers::DirectToneCh(hub_->engine(), ch, divider, attn);
+    } else {
+        auto nc = TrackerPlaybackEngine::decode_noise_val(
+            TrackerPlaybackEngine::midi_note_to_noise_val(midi_note));
+        psg_helpers::DirectNoise(hub_->engine(), nc.rate, nc.type, attn);
+    }
+
+    QTimer::singleShot(100, this, [this, ch]() {
+        if (playing_) return;
+        if (!hub_ || !hub_->engine_ready()) return;
+        if (ch < 3) {
+            psg_helpers::DirectSilenceTone(hub_->engine(), ch);
+        } else {
+            psg_helpers::DirectSilenceNoise(hub_->engine());
+        }
+    });
+}
+
+// ============================================================
+// Save / Load
+// ============================================================
+
+void TrackerTab::on_save() {
+    QString path = QFileDialog::getSaveFileName(this, "Save Song / Pattern",
+                                                 QString(),
+                                                 "NGPC Song (*.ngps);;NGPC Pattern (*.ngpat);;JSON (*.json)");
+    if (path.isEmpty()) return;
+
+    QByteArray data;
+    if (path.endsWith(".ngpat", Qt::CaseInsensitive) || path.endsWith(".json", Qt::CaseInsensitive)) {
+        // Save only current pattern
+        data = doc_->to_json();
+    } else {
+        // Save whole song
+        data = song_->to_json();
+    }
+
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(data);
+        f.close();
+        append_log(QString("Saved to %1").arg(path));
+    } else {
+        append_log(QString("ERROR: Could not write %1").arg(path));
+    }
+}
+
+void TrackerTab::on_load() {
+    QString path = QFileDialog::getOpenFileName(this, "Load Song / Pattern",
+                                                 QString(),
+                                                 "All supported (*.ngps *.ngpat *.json);;NGPC Song (*.ngps);;NGPC Pattern (*.ngpat);;All (*)");
+    if (path.isEmpty()) return;
+
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        append_log(QString("ERROR: Could not open %1").arg(path));
+        return;
+    }
+
+    QByteArray data = f.readAll();
+    f.close();
+
+    bool loaded = false;
+    if (path.endsWith(".ngps", Qt::CaseInsensitive)) {
+        loaded = song_->from_json(data);
+    } else {
+        // Try song format first, fall back to single pattern
+        loaded = song_->from_json(data);
+        if (!loaded) {
+            loaded = song_->import_ngpat(data);
+        }
+    }
+
+    if (loaded) {
+        doc_ = song_->active_pattern();
+        grid_->set_document(doc_);
+        engine_->set_document(doc_);
+        length_spin_->setValue(doc_->length());
+        refresh_pattern_ui();
+        refresh_order_list();
+        grid_->set_cursor(0, 0, TrackerGridWidget::SubNote);
+        grid_->update();
+        append_log(QString("Loaded from %1 (%2 patterns, order length %3)")
+            .arg(path).arg(song_->pattern_count()).arg(song_->order_length()));
+    } else {
+        append_log(QString("ERROR: Invalid file %1").arg(path));
+    }
+}
+
+// ============================================================
+// Export — pre-baked (tick-by-tick with effects + instruments)
+// ============================================================
+
+TrackerTab::ExportStreams TrackerTab::build_export_streams() const
+{
+    ExportStreams result;
+    result.loop_offsets.fill(0);
+
+    if (!song_ || song_->pattern_count() == 0) return result;
+
+    static constexpr int kMaxDriverNotes = 51;
+
+    // --- Phase 1: Tick-by-tick simulation (like WavExporter) ---
+
+    struct TickSnapshot {
+        bool active;
+        uint16_t divider;
+        uint8_t attn;
+        uint8_t noise_val;
+    };
+    // snapshots[tick_index][channel]
+    std::vector<std::array<TickSnapshot, 4>> snapshots;
+    int loop_tick = -1; // tick index where loop point starts
+
+    TrackerPlaybackEngine engine;
+    engine.set_instrument_store(const_cast<InstrumentStore*>(store_));
+    engine.set_ticks_per_row(tpr_spin_->value());
+
+    const auto& order = song_->order();
+    if (order.empty()) return result;
+
+    for (int ord_pos = 0; ord_pos < static_cast<int>(order.size()); ++ord_pos) {
+        // Record loop point
+        if (ord_pos == song_->loop_point()) {
+            loop_tick = static_cast<int>(snapshots.size());
+        }
+
+        int pat_idx = order[static_cast<size_t>(ord_pos)];
+        TrackerDocument* pat = song_->pattern(pat_idx);
+        if (!pat) continue;
+
+        engine.set_document(pat);
+        engine.start(0);
+
+        bool pattern_done = false;
+        bool had_ticks = false;
+        while (!pattern_done) {
+            engine.tick();
+            had_ticks = true;
+
+            std::array<TickSnapshot, 4> snap;
+            for (int ch = 0; ch < 4; ++ch) {
+                auto out = engine.channel_output(ch);
+                snap[static_cast<size_t>(ch)] = {out.active, out.divider, out.attn, out.noise_val};
+            }
+            snapshots.push_back(snap);
+
+            // Pattern finished detection (same as WavExporter)
+            if (engine.current_row() == 0 && engine.tick_counter() == 0 && had_ticks) {
+                pattern_done = true;
+            }
+        }
+        engine.stop();
+    }
+
+    if (snapshots.empty()) return result;
+
+    // --- Phase 2: Build NOTE_TABLE from unique dividers ---
+
+    std::vector<uint16_t>& note_table = result.note_table;
+    bool note_table_capped = false;
+
+    auto find_or_add_divider = [&](uint16_t div) -> int {
+        for (size_t i = 0; i < note_table.size(); ++i) {
+            if (note_table[i] == div) return static_cast<int>(i);
+        }
+        if (static_cast<int>(note_table.size()) < kMaxDriverNotes) {
+            note_table.push_back(div);
+            return static_cast<int>(note_table.size() - 1);
+        }
+        // Table full — find closest divider
+        note_table_capped = true;
+        int best_idx = 0;
+        int best_diff = std::abs(static_cast<int>(note_table[0]) - static_cast<int>(div));
+        for (size_t i = 1; i < note_table.size(); ++i) {
+            int diff = std::abs(static_cast<int>(note_table[i]) - static_cast<int>(div));
+            if (diff < best_diff) { best_diff = diff; best_idx = static_cast<int>(i); }
+        }
+        return best_idx;
+    };
+
+    // Pre-collect all unique dividers from tone channels
+    for (const auto& snap : snapshots) {
+        for (int ch = 0; ch < 3; ++ch) {
+            if (snap[static_cast<size_t>(ch)].active && snap[static_cast<size_t>(ch)].divider > 0) {
+                find_or_add_divider(snap[static_cast<size_t>(ch)].divider);
+            }
+        }
+    }
+    if (note_table.empty()) note_table.push_back(1);
+
+    // --- Phase 3: Build streams from snapshots ---
+
+    auto append_event = [](std::vector<uint8_t>& dst, uint8_t opcode, int duration) {
+        int remaining = std::max(duration, 1);
+        while (remaining > 0) {
+            int chunk = std::min(remaining, 255);
+            dst.push_back(opcode);
+            dst.push_back(static_cast<uint8_t>(chunk));
+            remaining -= chunk;
+        }
+    };
+
+    const int total_ticks = static_cast<int>(snapshots.size());
+
+    for (int ch = 0; ch < 4; ++ch) {
+        auto& stream = result.streams[static_cast<size_t>(ch)];
+        const bool is_noise = (ch == 3);
+
+        // Track current state
+        bool cur_active = false;
+        uint16_t cur_divider = 0;
+        uint8_t cur_attn = 15;
+        uint8_t cur_noise = 0;
+        uint8_t cur_note_idx = 0; // 0 = no note playing
+        int pending_dur = 0;
+
+        for (int t = 0; t < total_ticks; ++t) {
+            // Record loop offset
+            if (t == loop_tick) {
+                result.loop_offsets[static_cast<size_t>(ch)] = static_cast<uint16_t>(stream.size());
+            }
+
+            const auto& s = snapshots[static_cast<size_t>(t)][static_cast<size_t>(ch)];
+
+            if (!s.active) {
+                // Channel silent
+                if (cur_active && cur_note_idx != 0) {
+                    // Was playing a note → flush it, then start rest
+                    append_event(stream, cur_note_idx, pending_dur);
+                    pending_dur = 0;
+                    cur_note_idx = 0;
+                }
+                cur_active = false;
+                // Accumulate rest duration (0xFF)
+                if (cur_note_idx == 0) {
+                    pending_dur++;
+                }
+                continue;
+            }
+
+            // Channel is active
+            uint8_t new_note_idx;
+            if (is_noise) {
+                new_note_idx = static_cast<uint8_t>((s.noise_val & 0x07) + 1);
+            } else {
+                new_note_idx = static_cast<uint8_t>(find_or_add_divider(s.divider) + 1);
+            }
+
+            bool note_changed = (new_note_idx != cur_note_idx) || !cur_active;
+            bool attn_changed = (s.attn != cur_attn);
+
+            if (note_changed || attn_changed) {
+                // Flush pending duration
+                if (pending_dur > 0) {
+                    if (cur_note_idx == 0) {
+                        // Was a rest
+                        append_event(stream, 0xFF, pending_dur);
+                    } else {
+                        // Was a note
+                        append_event(stream, cur_note_idx, pending_dur);
+                    }
+                    pending_dur = 0;
+                }
+
+                // Emit attenuation change if needed
+                if (attn_changed) {
+                    stream.push_back(0xF0);
+                    stream.push_back(static_cast<uint8_t>(s.attn & 0x0F));
+                    cur_attn = s.attn;
+                }
+
+                cur_note_idx = new_note_idx;
+                cur_active = true;
+                cur_divider = s.divider;
+                cur_noise = s.noise_val;
+            }
+
+            pending_dur++;
+        }
+
+        // Flush remaining
+        if (pending_dur > 0) {
+            if (cur_note_idx == 0) {
+                append_event(stream, 0xFF, pending_dur);
+            } else {
+                append_event(stream, cur_note_idx, pending_dur);
+            }
+        }
+
+        // End marker
+        stream.push_back(0x00);
+    }
+
+    return result;
+}
+
+// ============================================================
+// Export — hybrid (row-based with instrument opcodes)
+// ============================================================
+
+TrackerTab::ExportStreams TrackerTab::build_export_streams_hybrid() const
+{
+    ExportStreams result;
+    result.loop_offsets.fill(0);
+
+    if (!song_ || song_->pattern_count() == 0) return result;
+
+    static constexpr int kMaxDriverNotes = 51;
+
+    // --- Collect all unique MIDI notes to build NOTE_TABLE ---
+
+    std::vector<uint16_t>& note_table = result.note_table;
+
+    auto find_or_add_divider = [&](uint16_t div) -> int {
+        for (size_t i = 0; i < note_table.size(); ++i) {
+            if (note_table[i] == div) return static_cast<int>(i);
+        }
+        if (static_cast<int>(note_table.size()) < kMaxDriverNotes) {
+            note_table.push_back(div);
+            return static_cast<int>(note_table.size() - 1);
+        }
+        // Table full — find closest divider
+        int best_idx = 0;
+        int best_diff = std::abs(static_cast<int>(note_table[0]) - static_cast<int>(div));
+        for (size_t i = 1; i < note_table.size(); ++i) {
+            int diff = std::abs(static_cast<int>(note_table[i]) - static_cast<int>(div));
+            if (diff < best_diff) { best_diff = diff; best_idx = static_cast<int>(i); }
+        }
+        return best_idx;
+    };
+
+    auto append_event = [](std::vector<uint8_t>& dst, uint8_t opcode, int duration) {
+        int remaining = std::max(duration, 1);
+        while (remaining > 0) {
+            int chunk = std::min(remaining, 255);
+            dst.push_back(opcode);
+            dst.push_back(static_cast<uint8_t>(chunk));
+            remaining -= chunk;
+        }
+    };
+
+    // Helper: emit instrument inline opcodes (0xF4 + 0xF0-0xF3)
+    auto emit_instrument = [&](std::vector<uint8_t>& stream, int inst_idx) {
+        ngpc::BgmInstrumentDef def;
+        if (store_ && inst_idx < store_->count()) {
+            def = store_->at(inst_idx).def;
+        }
+        // 0xF4 SET_INST (for real driver)
+        stream.push_back(0xF4);
+        stream.push_back(static_cast<uint8_t>(inst_idx & 0xFF));
+        // 0xF0 SET_ATTN (for PlayerTab preview)
+        stream.push_back(0xF0);
+        stream.push_back(static_cast<uint8_t>(def.attn & 0x0F));
+        // 0xF1 SET_ENV
+        if (def.env_on) {
+            stream.push_back(0xF1);
+            stream.push_back(def.env_step);
+            stream.push_back(def.env_speed);
+        } else {
+            stream.push_back(0xF1);
+            stream.push_back(0); // step=0 → env off
+            stream.push_back(1);
+        }
+        // 0xF2 SET_VIB
+        stream.push_back(0xF2);
+        stream.push_back(def.vib_depth);
+        stream.push_back(def.vib_speed > 0 ? def.vib_speed : static_cast<uint8_t>(1));
+        stream.push_back(def.vib_delay);
+        // 0xF3 SET_SWEEP
+        if (def.sweep_on) {
+            stream.push_back(0xF3);
+            stream.push_back(static_cast<uint8_t>(def.sweep_end & 0xFF));
+            stream.push_back(static_cast<uint8_t>((def.sweep_end >> 8) & 0xFF));
+            stream.push_back(static_cast<uint8_t>(def.sweep_step & 0xFF));
+            stream.push_back(def.sweep_speed > 0 ? def.sweep_speed : static_cast<uint8_t>(1));
+        }
+        // 0xF9 SET_ADSR
+        if (def.adsr_on) {
+            stream.push_back(0xF9);
+            stream.push_back(def.adsr_attack);
+            stream.push_back(def.adsr_decay);
+            stream.push_back(def.adsr_sustain);
+            stream.push_back(def.adsr_release);
+        }
+    };
+
+    const auto& order = song_->order();
+    if (order.empty()) return result;
+
+    int ticks_per_row = tpr_spin_->value();
+
+    // --- Build streams row by row ---
+
+    for (int ch = 0; ch < 4; ++ch) {
+        auto& stream = result.streams[static_cast<size_t>(ch)];
+        const bool is_noise = (ch == 3);
+
+        int cur_instrument = -1;
+        uint8_t cur_attn = 0xFF; // no override yet
+
+        // Pending state: accumulate durations for same note/silence
+        enum PendingType { PEND_NONE, PEND_NOTE, PEND_SILENCE };
+        PendingType pending = PEND_NONE;
+        uint8_t pending_note_idx = 0;
+        int pending_dur = 0;
+
+        auto flush_pending = [&]() {
+            if (pending_dur <= 0) return;
+            if (pending == PEND_NOTE && pending_note_idx > 0) {
+                append_event(stream, pending_note_idx, pending_dur);
+            } else if (pending == PEND_SILENCE) {
+                append_event(stream, 0xFF, pending_dur);
+            }
+            pending = PEND_NONE;
+            pending_dur = 0;
+        };
+
+        int local_tpr = ticks_per_row;
+
+        for (int ord_pos = 0; ord_pos < static_cast<int>(order.size()); ++ord_pos) {
+            // Record loop point
+            if (ch == 0 || true) { // all channels
+                if (ord_pos == song_->loop_point()) {
+                    flush_pending();
+                    result.loop_offsets[static_cast<size_t>(ch)] = static_cast<uint16_t>(stream.size());
+                }
+            }
+
+            int pat_idx = order[static_cast<size_t>(ord_pos)];
+            TrackerDocument* pat = song_->pattern(pat_idx);
+            if (!pat) continue;
+
+            for (int row = 0; row < pat->length(); ++row) {
+                const TrackerCell& c = pat->cell(ch, row);
+                int dur = local_tpr;
+
+                // Bxx: speed change
+                if (c.fx == 0xB && c.fx_param > 0) {
+                    local_tpr = c.fx_param;
+                    dur = local_tpr;
+                }
+
+                // Exx: host commands (emit on channel 0 only)
+                if (c.fx == 0xE && ch == 0) {
+                    flush_pending();
+                    uint8_t sub = (c.fx_param >> 4) & 0x0F;
+                    uint8_t val = c.fx_param & 0x0F;
+                    stream.push_back(0xF6); // HOST_CMD
+                    stream.push_back(sub);  // type: 0=fade, 1=tempo
+                    stream.push_back(val);  // data
+                }
+
+                // Fxx: expression (per-channel)
+                if (c.fx == 0xF) {
+                    flush_pending();
+                    uint8_t expr = c.fx_param;
+                    if (expr > 15) expr = 15;
+                    stream.push_back(0xF7); // SET_EXPR
+                    stream.push_back(expr);
+                }
+
+                // 4xx: pitch bend (per-channel, signed byte -> s16 LE)
+                if (c.fx == 0x4) {
+                    flush_pending();
+                    int8_t sb = static_cast<int8_t>(c.fx_param);
+                    int16_t bend = static_cast<int16_t>(sb);
+                    stream.push_back(0xF8); // PITCH_BEND
+                    stream.push_back(static_cast<uint8_t>(bend & 0xFF));
+                    stream.push_back(static_cast<uint8_t>((bend >> 8) & 0xFF));
+                }
+
+                if (c.is_note_on()) {
+                    // Flush any pending note/silence
+                    flush_pending();
+
+                    // Instrument change?
+                    if (static_cast<int>(c.instrument) != cur_instrument) {
+                        cur_instrument = c.instrument;
+                        emit_instrument(stream, cur_instrument);
+                    }
+
+                    // Attn override?
+                    if (c.attn != 0xFF) {
+                        stream.push_back(0xF0);
+                        stream.push_back(static_cast<uint8_t>(c.attn & 0x0F));
+                        cur_attn = c.attn;
+                    }
+
+                    // Compute note index
+                    uint8_t note_idx;
+                    if (is_noise) {
+                        note_idx = static_cast<uint8_t>((TrackerPlaybackEngine::midi_note_to_noise_val(c.note) & 0x07) + 1);
+                    } else {
+                        uint16_t div = TrackerPlaybackEngine::midi_to_divider(c.note);
+                        note_idx = static_cast<uint8_t>(find_or_add_divider(div) + 1);
+                    }
+
+                    // Handle Cxx (note cut)
+                    if (c.fx == 0xC) {
+                        int cut = std::min(static_cast<int>(c.fx_param), dur);
+                        if (cut > 0) {
+                            append_event(stream, note_idx, cut);
+                        }
+                        int rest = dur - cut;
+                        if (rest > 0) {
+                            pending = PEND_SILENCE;
+                            pending_dur = rest;
+                        }
+                    }
+                    // Handle Dxx (note delay)
+                    else if (c.fx == 0xD) {
+                        int delay = std::min(static_cast<int>(c.fx_param), dur);
+                        if (delay > 0) {
+                            append_event(stream, 0xFF, delay);
+                        }
+                        int rest = dur - delay;
+                        if (rest > 0) {
+                            pending = PEND_NOTE;
+                            pending_note_idx = note_idx;
+                            pending_dur = rest;
+                        }
+                    }
+                    else {
+                        pending = PEND_NOTE;
+                        pending_note_idx = note_idx;
+                        pending_dur = dur;
+                    }
+                }
+                else if (c.is_note_off()) {
+                    flush_pending();
+                    pending = PEND_SILENCE;
+                    pending_dur = dur;
+                }
+                else {
+                    // Empty row or effect-only row
+                    // Attn change on empty row: emit inline
+                    if (c.attn != 0xFF && c.attn != cur_attn) {
+                        flush_pending();
+                        stream.push_back(0xF0);
+                        stream.push_back(static_cast<uint8_t>(c.attn & 0x0F));
+                        cur_attn = c.attn;
+                        // Restart same state (the note/silence continues)
+                    }
+                    // Accumulate duration
+                    if (pending == PEND_NONE) {
+                        // No note was playing → silence
+                        pending = PEND_SILENCE;
+                        pending_dur = dur;
+                    } else {
+                        pending_dur += dur;
+                    }
+                }
+            }
+        }
+
+        // Flush remaining
+        flush_pending();
+
+        // End marker
+        stream.push_back(0x00);
+    }
+
+    if (note_table.empty()) note_table.push_back(1);
+
+    return result;
+}
+
+void TrackerTab::on_export() {
+    const bool hybrid = export_mode_combo_ && export_mode_combo_->currentIndex() == 1;
+    auto es = hybrid ? build_export_streams_hybrid() : build_export_streams();
+    if (es.note_table.empty()) {
+        append_log("Export: nothing to export.");
+        return;
+    }
+
+    const char* mode_label = hybrid ? "Hybrid" : "Pre-baked";
+
+    std::ostringstream out;
+    out << "/* Generated by NGPC Sound Creator - " << mode_label << " Export */\n";
+    out << "/* BGM_CHN noise format: val = stream_byte - 1 (0-7)        */\n";
+    out << "/*   rate = val & 0x03 (0=H,1=M,2=L,3=Tone2)               */\n";
+    out << "/*   type = (val >> 2) & 0x01 (0=Periodic,1=White)          */\n\n";
+
+    auto write_u8_array = [&](const char* name, const std::vector<uint8_t>& values) {
+        out << "const unsigned char " << name << "[] = {\n";
+        if (values.empty()) {
+            out << "    0x00\n";
+        } else {
+            for (size_t i = 0; i < values.size(); ++i) {
+                if ((i % 12) == 0) out << "    ";
+                out << static_cast<int>(values[i]);
+                if (i + 1 < values.size()) out << ", ";
+                if ((i % 12) == 11 || i + 1 == values.size()) out << "\n";
+            }
+        }
+        out << "};\n\n";
+    };
+
+    // NOTE_TABLE
+    std::vector<uint8_t> note_table_bytes;
+    note_table_bytes.reserve(es.note_table.size() * 2);
+    for (uint16_t d : es.note_table) {
+        note_table_bytes.push_back(static_cast<uint8_t>(d & 0x0F));
+        note_table_bytes.push_back(static_cast<uint8_t>((d >> 4) & 0x3F));
+    }
+    write_u8_array("NOTE_TABLE", note_table_bytes);
+
+    // LOOP offsets
+    out << "const unsigned short BGM_CH0_LOOP = " << es.loop_offsets[0] << ";\n";
+    out << "const unsigned short BGM_CH1_LOOP = " << es.loop_offsets[1] << ";\n";
+    out << "const unsigned short BGM_CH2_LOOP = " << es.loop_offsets[2] << ";\n";
+    out << "const unsigned short BGM_CHN_LOOP = " << es.loop_offsets[3] << ";\n\n";
+
+    // Channel streams
+    write_u8_array("BGM_CH0", es.streams[0]);
+    write_u8_array("BGM_CH1", es.streams[1]);
+    write_u8_array("BGM_CH2", es.streams[2]);
+    write_u8_array("BGM_CHN", es.streams[3]);
+    out << "const unsigned char BGM_MONO[] = { 0x00 };\n";
+
+    QString result = QString::fromStdString(out.str());
+
+    QString path = QFileDialog::getSaveFileName(this, "Export C", QString(), "C Source (*.c *.h);;All Files (*)");
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        append_log("ERROR: could not write to " + path);
+        return;
+    }
+    file.write(result.toUtf8());
+    file.close();
+
+    QString inst_path;
+    if (store_) {
+        const QFileInfo fi(path);
+        inst_path = fi.path() + "/" + fi.completeBaseName() + "_instruments.c";
+        QFile ifile(inst_path);
+        if (ifile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QString inst_code;
+            inst_code += "/* Generated by NGPC Sound Creator - Instrument Presets */\n";
+            inst_code += "/* Keep this table in sync with driver_custom_latest/sounds.c */\n\n";
+            inst_code += store_->export_c_array();
+            ifile.write(inst_code.toUtf8());
+            ifile.close();
+        } else {
+            append_log("WARNING: could not write instrument export to " + inst_path);
+            inst_path.clear();
+        }
+    }
+
+    int total_bytes = 0;
+    for (int ch = 0; ch < 4; ++ch)
+        total_bytes += static_cast<int>(es.streams[static_cast<size_t>(ch)].size());
+    append_log(QString("%1 export: %2 notes, %3 stream bytes, saved to %4.")
+               .arg(mode_label).arg(es.note_table.size()).arg(total_bytes).arg(QFileInfo(path).fileName()));
+    if (!inst_path.isEmpty()) {
+        append_log(QString("Instrument presets exported to %1.")
+                   .arg(QFileInfo(inst_path).fileName()));
+    }
+}
+
+void TrackerTab::on_export_asm() {
+    const bool hybrid = export_mode_combo_ && export_mode_combo_->currentIndex() == 1;
+    auto es = hybrid ? build_export_streams_hybrid() : build_export_streams();
+    if (es.note_table.empty()) {
+        append_log("ASM Export: nothing to export.");
+        return;
+    }
+
+    const char* mode_label = hybrid ? "Hybrid" : "Pre-baked";
+
+    std::ostringstream out;
+    out << "; Generated by NGPC Sound Creator - " << mode_label << " ASM Export\n";
+    out << "; Format: TLCS-900H / SNK NGPC toolchain (.inc)\n";
+    out << "; BGM_CHN noise: val = byte - 1 (0-7)\n";
+    out << ";   rate = val & 0x03 (0=H,1=M,2=L,3=Tone2)\n";
+    out << ";   type = (val >> 2) & 0x01 (0=Periodic,1=White)\n\n";
+
+    auto write_db_array = [&](const char* label, const std::vector<uint8_t>& values) {
+        out << label << ":\n";
+        for (size_t i = 0; i < values.size(); ++i) {
+            if ((i % 12) == 0) out << "        .db     ";
+            char hex[8];
+            std::snprintf(hex, sizeof(hex), "0x%02X", values[i]);
+            out << hex;
+            if ((i % 12) == 11 || i + 1 == values.size()) {
+                out << "\n";
+            } else {
+                out << ", ";
+            }
+        }
+        out << "\n";
+    };
+
+    auto write_dw = [&](const char* label, uint16_t value) {
+        char hex[8];
+        std::snprintf(hex, sizeof(hex), "0x%04X", value);
+        out << label << ":\n        .dw     " << hex << "\n\n";
+    };
+
+    // NOTE_TABLE
+    std::vector<uint8_t> note_table_bytes;
+    note_table_bytes.reserve(es.note_table.size() * 2);
+    for (uint16_t d : es.note_table) {
+        note_table_bytes.push_back(static_cast<uint8_t>(d & 0x0F));
+        note_table_bytes.push_back(static_cast<uint8_t>((d >> 4) & 0x3F));
+    }
+    write_db_array("NOTE_TABLE", note_table_bytes);
+
+    // LOOP offsets
+    write_dw("BGM_CH0_LOOP", es.loop_offsets[0]);
+    write_dw("BGM_CH1_LOOP", es.loop_offsets[1]);
+    write_dw("BGM_CH2_LOOP", es.loop_offsets[2]);
+    write_dw("BGM_CHN_LOOP", es.loop_offsets[3]);
+
+    // Channel streams
+    write_db_array("BGM_CH0", es.streams[0]);
+    write_db_array("BGM_CH1", es.streams[1]);
+    write_db_array("BGM_CH2", es.streams[2]);
+    write_db_array("BGM_CHN", es.streams[3]);
+    out << "BGM_MONO:\n        .db     0x00\n";
+
+    QString result = QString::fromStdString(out.str());
+
+    QString path = QFileDialog::getSaveFileName(this, "Export ASM", QString(), "ASM Include (*.inc);;All Files (*)");
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        append_log("ERROR: could not write to " + path);
+        return;
+    }
+    file.write(result.toUtf8());
+    file.close();
+
+    QString inst_path;
+    if (store_) {
+        const QFileInfo fi(path);
+        inst_path = fi.path() + "/" + fi.completeBaseName() + "_instruments.c";
+        QFile ifile(inst_path);
+        if (ifile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QString inst_code;
+            inst_code += "/* Generated by NGPC Sound Creator - Instrument Presets */\n";
+            inst_code += "/* Keep this table in sync with driver_custom_latest/sounds.c */\n\n";
+            inst_code += store_->export_c_array();
+            ifile.write(inst_code.toUtf8());
+            ifile.close();
+        } else {
+            append_log("WARNING: could not write instrument export to " + inst_path);
+            inst_path.clear();
+        }
+    }
+
+    int total_bytes = 0;
+    for (int ch = 0; ch < 4; ++ch)
+        total_bytes += static_cast<int>(es.streams[static_cast<size_t>(ch)].size());
+    append_log(QString("%1 ASM export: %2 notes, %3 stream bytes, saved to %4.")
+               .arg(mode_label).arg(es.note_table.size()).arg(total_bytes).arg(QFileInfo(path).fileName()));
+    if (!inst_path.isEmpty()) {
+        append_log(QString("Instrument presets exported to %1.")
+                   .arg(QFileInfo(inst_path).fileName()));
+    }
+}
+
+// ============================================================
+// Pattern / Order management
+// ============================================================
+
+void TrackerTab::switch_to_pattern(int index) {
+    if (index < 0 || index >= song_->pattern_count()) return;
+    song_->set_active_pattern(index);
+    doc_ = song_->active_pattern();
+    grid_->set_document(doc_);
+    engine_->set_document(doc_);
+    length_spin_->blockSignals(true);
+    length_spin_->setValue(doc_->length());
+    length_spin_->blockSignals(false);
+    pattern_spin_->blockSignals(true);
+    pattern_spin_->setValue(index);
+    pattern_spin_->blockSignals(false);
+    grid_->update();
+    update_status_label();
+}
+
+void TrackerTab::refresh_pattern_ui() {
+    int count = song_->pattern_count();
+    pattern_spin_->blockSignals(true);
+    pattern_spin_->setRange(0, std::max(0, count - 1));
+    pattern_spin_->setValue(song_->active_pattern_index());
+    pattern_spin_->blockSignals(false);
+    pattern_count_label_->setText(QString("/%1").arg(count));
+    pat_del_btn_->setEnabled(count > 1);
+}
+
+void TrackerTab::refresh_order_list() {
+    order_list_->blockSignals(true);
+    int prev_row = order_list_->currentRow();
+    order_list_->clear();
+    const auto& ord = song_->order();
+    int loop_pt = song_->loop_point();
+    for (int i = 0; i < static_cast<int>(ord.size()); ++i) {
+        QString text = QString("%1").arg(ord[static_cast<size_t>(i)], 2, 10, QChar('0'));
+        if (i == loop_pt) text = "L>" + text;
+        order_list_->addItem(text);
+    }
+    if (prev_row >= 0 && prev_row < order_list_->count())
+        order_list_->setCurrentRow(prev_row);
+    else if (order_list_->count() > 0)
+        order_list_->setCurrentRow(0);
+    order_list_->blockSignals(false);
+}
+
+void TrackerTab::on_pattern_finished() {
+    if (!song_mode_) {
+        // Single-pattern mode: engine already wrapped to row 0
+        return;
+    }
+
+    // Song mode: advance to next order entry
+    song_order_pos_++;
+    if (song_order_pos_ >= song_->order_length()) {
+        // Reached end of order list: loop back to loop_point
+        song_order_pos_ = song_->loop_point();
+    }
+
+    const auto& ord = song_->order();
+    int pat_idx = ord[static_cast<size_t>(song_order_pos_)];
+
+    // Switch the engine to the new pattern
+    TrackerDocument* new_doc = song_->pattern(pat_idx);
+    if (!new_doc) {
+        stop_playback();
+        return;
+    }
+
+    engine_->set_document(new_doc);
+    engine_->start(0);  // start from row 0 of new pattern
+
+    // Update grid to show current playback pattern
+    if (follow_mode_) {
+        switch_to_pattern(pat_idx);
+    }
+
+    // Highlight current order position
+    order_list_->setCurrentRow(song_order_pos_);
+    append_log(QString("Song: order %1 -> Pat %2").arg(song_order_pos_).arg(pat_idx));
+}
+
+void TrackerTab::start_song_playback() {
+    stop_playback();
+
+    if (hub_) hub_->set_step_z80(false);
+
+    if (!hub_ || !hub_->ensure_audio_running(44100)) {
+        append_log("ERROR: Audio engine not ready.");
+        return;
+    }
+
+    if (song_->order_length() == 0) {
+        append_log("ERROR: Order list is empty.");
+        return;
+    }
+
+    song_mode_ = true;
+    song_order_pos_ = 0;
+    playing_ = true;
+
+    // Start with the first pattern in the order
+    const auto& ord = song_->order();
+    int pat_idx = ord[0];
+    TrackerDocument* start_doc = song_->pattern(pat_idx);
+    if (!start_doc) {
+        stop_playback();
+        return;
+    }
+
+    engine_->set_document(start_doc);
+    engine_->set_ticks_per_row(tpr_spin_->value());
+    engine_->start(0);
+
+    if (follow_mode_) {
+        switch_to_pattern(pat_idx);
+    }
+    grid_->set_playback_row(0);
+    order_list_->setCurrentRow(0);
+
+    play_btn_->setText("Pause [Space]");
+    play_timer_->start();
+    append_log(QString("Song playback started (%1 entries in order)").arg(song_->order_length()));
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+void TrackerTab::append_log(const QString& text) {
+    log_->appendPlainText(text);
+}
+
+// ============================================================
+// MIDI import
+// ============================================================
+
+void TrackerTab::on_import_midi() {
+    QString path = QFileDialog::getOpenFileName(this, "Import MIDI",
+                                                 QString(), "MIDI files (*.mid *.midi);;All (*)");
+    if (path.isEmpty()) return;
+
+    stop_playback();
+
+    MidiImportSettings settings;
+    settings.rows_per_beat = 4;
+    settings.pattern_length = length_spin_->value();
+    settings.import_velocity = true;
+
+    append_log(QString("Importing MIDI: %1 ...").arg(path));
+
+    MidiImportResult res = ImportMidi(path, song_, settings);
+
+    if (!res.success) {
+        append_log(QString("ERROR MIDI import: %1").arg(res.error));
+        return;
+    }
+
+    // Refresh UI with imported data
+    doc_ = song_->active_pattern();
+    grid_->set_document(doc_);
+    engine_->set_document(doc_);
+    length_spin_->blockSignals(true);
+    length_spin_->setValue(doc_->length());
+    length_spin_->blockSignals(false);
+    refresh_pattern_ui();
+    refresh_order_list();
+    grid_->set_cursor(0, 0, TrackerGridWidget::SubNote);
+    grid_->update();
+
+    // Apply suggested TPR
+    if (res.suggested_tpr != tpr_spin_->value()) {
+        tpr_spin_->setValue(res.suggested_tpr);
+        append_log(QString("TPR set to %1 (to match MIDI tempo)").arg(res.suggested_tpr));
+    }
+
+    append_log(QString("MIDI imported: %1 patterns, %2 notes (%3 dropped due to polyphony)")
+        .arg(res.patterns_created).arg(res.notes_imported).arg(res.notes_dropped));
+}
