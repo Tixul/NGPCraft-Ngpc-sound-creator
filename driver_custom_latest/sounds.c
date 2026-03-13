@@ -188,13 +188,23 @@ static const BgmMacroStep s_bgm_macro1[] = {
     {6, 4, 0},
     {0, 0, 0}
 };
+#else
+static const BgmMacroStep s_bgm_macro1[] = { {0, 0, 0} };
 #endif
+/* Stubs for NGPC Sound Creator hybrid export compatibility (macro_id 2..3).
+ * These must always be present; replace with actual steps if needed. */
+static const BgmMacroStep s_bgm_macro2[] = { {0, 0, 0} };
+static const BgmMacroStep s_bgm_macro3[] = { {0, 0, 0} };
 
 static const BgmMacro s_bgm_macros[] = {
     { s_bgm_macro0, 0 },
 #if SOUNDS_ENABLE_EXAMPLE_PRESETS
     { s_bgm_macro1, 4 },
+#else
+    { s_bgm_macro1, 0 },
 #endif
+    { s_bgm_macro2, 0 },
+    { s_bgm_macro3, 0 },
 };
 
 static const u8 s_bgm_macro_count = (u8)(sizeof(s_bgm_macros) / sizeof(s_bgm_macros[0]));
@@ -214,12 +224,17 @@ static const s8 s_bgm_env_curve0[] = { 0 };
 #if SOUNDS_ENABLE_EXAMPLE_PRESETS
 static const s8 s_bgm_env_curve1[] = { 0, 1, 2, 3, 4, 6, 8, 10 };
 #endif
+/* Stub for NGPC Sound Creator hybrid export compatibility (env_curve_id 2). */
+static const s8 s_bgm_env_curve2[] = { 0, 2, 4, 6, 8, 10, 12, 14 };
 
 static const BgmEnvCurve s_bgm_env_curves[] = {
     { s_bgm_env_curve0, 0 },
 #if SOUNDS_ENABLE_EXAMPLE_PRESETS
     { s_bgm_env_curve1, 8 },
+#else
+    { s_bgm_env_curve0, 0 },
 #endif
+    { s_bgm_env_curve2, 8 },
 };
 
 static const u8 s_bgm_env_curve_count = (u8)(sizeof(s_bgm_env_curves) / sizeof(s_bgm_env_curves[0]));
@@ -240,6 +255,10 @@ static const s16 s_bgm_pitch_curve1[] = { 0, -2, -4, -6, -8 };
 static const s16 s_bgm_pitch_curve2[] = { 0, 2, 4, 6, 8 };
 static const s16 s_bgm_pitch_curve3[] = { 0, 2, 0, -2, 0 };
 static const s16 s_bgm_pitch_curve4[] = { 0, -4, -8, -12, -8, -4, 0 };
+/* Aliases for NGPC Sound Creator hybrid export compatibility (pitch_curve_id 5..7). */
+static const s16 s_bgm_pitch_curve5[] = { 0, -2, -4, -6, -8 };          /* alias curve1 */
+static const s16 s_bgm_pitch_curve6[] = { 0, 2, 4, 6, 8 };              /* alias curve2 */
+static const s16 s_bgm_pitch_curve7[] = { 0, -4, -8, -12, -8, -4, 0 }; /* alias curve4 */
 
 static const BgmPitchCurve s_bgm_pitch_curves[] = {
     { s_bgm_pitch_curve0, 0 },
@@ -247,6 +266,9 @@ static const BgmPitchCurve s_bgm_pitch_curves[] = {
     { s_bgm_pitch_curve2, 5 },
     { s_bgm_pitch_curve3, 5 },
     { s_bgm_pitch_curve4, 7 },
+    { s_bgm_pitch_curve5, 5 },
+    { s_bgm_pitch_curve6, 5 },
+    { s_bgm_pitch_curve7, 7 },
 };
 
 static const u8 s_bgm_pitch_curve_count = (u8)(sizeof(s_bgm_pitch_curves) / sizeof(s_bgm_pitch_curves[0]));
