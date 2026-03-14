@@ -97,6 +97,9 @@ private:
     // Follow mode
     bool follow_mode_ = true;
 
+    // Instrument digit entry state (-1 = no pending first digit)
+    int inst_pending_nibble_ = -1;
+
     // Song mode playback
     bool song_mode_ = false;
     int song_order_pos_ = 0;

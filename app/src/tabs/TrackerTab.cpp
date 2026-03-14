@@ -1478,8 +1478,9 @@ TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
         }
     });
 
-    // Cursor moved -> update status bar
+    // Cursor moved -> update status bar + reset instrument entry state
     connect(grid_, &TrackerGridWidget::cursor_moved, this, [this](int, int) {
+        inst_pending_nibble_ = -1;
         update_status_label();
     });
 
@@ -2260,15 +2261,27 @@ void TrackerTab::on_instrument_digit(int ch, int row, int hex_digit) {
     int changed = 0;
     int touched = 0;
     bool undo_pushed = false;
+
+    // Two-digit hex entry with clean state: first digit sets low nibble from 0,
+    // second digit shifts first nibble left and appends new digit.
+    uint8_t inst;
+    if (inst_pending_nibble_ < 0) {
+        // First digit: treat field as empty (0x0N).
+        inst = static_cast<uint8_t>(hex_digit & 0x0F);
+        inst_pending_nibble_ = hex_digit & 0x0F;
+    } else {
+        // Second digit: combine with first digit.
+        inst = static_cast<uint8_t>((inst_pending_nibble_ << 4) | (hex_digit & 0x0F));
+        inst_pending_nibble_ = -1;
+    }
+    inst = std::min<uint8_t>(inst, TrackerDocument::kMaxInstrument);
+
     for (const EditCell& ec : edit_cells) {
         const auto& c = doc_->cell(ec.ch, ec.row);
         if (!c.is_note_on()) {
             continue;
         }
         touched++;
-        // Shift previous low nibble, append new nibble (works for single and multi-selection).
-        uint8_t inst = static_cast<uint8_t>(((c.instrument & 0x0F) << 4) | (hex_digit & 0x0F));
-        inst = std::min<uint8_t>(inst, TrackerDocument::kMaxInstrument);
         if (c.instrument != inst) {
             if (!undo_pushed) {
                 doc_->push_undo();
@@ -2282,7 +2295,9 @@ void TrackerTab::on_instrument_digit(int ch, int row, int hex_digit) {
         return;
     }
     if (changed > 1) {
-        append_log(QString("Instrument nibble applied on %1 note(s).").arg(changed));
+        append_log(QString("Instrument set to %1 on %2 note(s).")
+            .arg(inst, 2, 16, QChar('0')).toUpper()
+            .arg(changed));
     }
     update_status_label();
 }

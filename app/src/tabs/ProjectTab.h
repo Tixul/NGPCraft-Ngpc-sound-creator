@@ -35,6 +35,7 @@ signals:
     void open_sfx_requested(int index);
     void create_song_requested(const QString& name);
     void import_midi_song_requested(const QString& name, const QString& midi_path);
+    void import_ngps_song_requested(const QString& name, const QString& ngps_path);
     void rename_song_requested(int index, const QString& new_name);
     void delete_song_requested(int index);
     void export_songs_c_requested();
@@ -64,6 +65,7 @@ private:
     QPushButton* open_btn_ = nullptr;
     QPushButton* new_btn_ = nullptr;
     QPushButton* import_btn_ = nullptr;
+    QPushButton* import_ngps_btn_ = nullptr;
     QPushButton* rename_btn_ = nullptr;
     QPushButton* delete_btn_ = nullptr;
     QPushButton* export_songs_c_btn_ = nullptr;

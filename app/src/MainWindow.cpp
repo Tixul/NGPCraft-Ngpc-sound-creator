@@ -1584,6 +1584,51 @@ void MainWindow::connect_project_signals() {
         refresh_project_tab();
     });
 
+    connect(project_tab_, &ProjectTab::import_ngps_song_requested, this,
+            [this](const QString& name, const QString& ngps_path) {
+        if (!project_ready_) return;
+        autosave_now("import-ngps-song");
+
+        ProjectSongEntry entry;
+        entry.id = make_unique_song_id(name);
+        entry.name = name;
+        entry.file = QString("songs/%1.ngps").arg(entry.id);
+
+        const int old_idx = active_song_index();
+        const QString old_active_id = project_doc_.active_song_id;
+
+        QString error;
+        const int new_index = project_doc_.songs.size();
+        project_doc_.songs.push_back(entry);
+        project_doc_.active_song_id = entry.id;
+
+        const QString dest = song_abs_path(new_index);
+        bool ok = QFile::copy(ngps_path, dest);
+        if (!ok && QFile::exists(dest)) {
+            QFile::remove(dest);
+            ok = QFile::copy(ngps_path, dest);
+        }
+        if (ok) {
+            ok = load_song_by_index(new_index, &error) &&
+                 save_project_metadata(&error);
+        } else {
+            error = QString("Impossible de copier le fichier .ngps vers le projet.");
+        }
+
+        if (!ok) {
+            QFile::remove(dest);
+            project_doc_.songs.removeAt(new_index);
+            project_doc_.active_song_id = old_active_id;
+            if (old_idx >= 0 && old_idx < project_doc_.songs.size()) {
+                load_song_by_index(old_idx);
+            }
+            QMessageBox::warning(this, "Import .ngps failed", error);
+            refresh_project_tab();
+            return;
+        }
+        refresh_project_tab();
+    });
+
     connect(project_tab_, &ProjectTab::rename_song_requested, this, [this](int index, const QString& new_name) {
         if (!project_ready_) return;
         if (index < 0 || index >= project_doc_.songs.size()) return;

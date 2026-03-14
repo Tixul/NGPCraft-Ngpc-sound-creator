@@ -5,6 +5,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -58,11 +59,13 @@ ProjectTab::ProjectTab(AppLanguage language, QWidget* parent)
     open_btn_ = new QPushButton(ui("Ouvrir morceau", "Open song"), this);
     new_btn_ = new QPushButton(ui("Nouveau", "New"), this);
     import_btn_ = new QPushButton(ui("Nouveau depuis MIDI", "New from MIDI"), this);
+    import_ngps_btn_ = new QPushButton(ui("Importer .ngps...", "Import .ngps..."), this);
     rename_btn_ = new QPushButton(ui("Renommer", "Rename"), this);
     delete_btn_ = new QPushButton(ui("Supprimer", "Delete"), this);
     actions->addWidget(open_btn_);
     actions->addWidget(new_btn_);
     actions->addWidget(import_btn_);
+    actions->addWidget(import_ngps_btn_);
     actions->addWidget(rename_btn_);
     actions->addWidget(delete_btn_);
     songs_layout->addLayout(actions);
@@ -185,6 +188,27 @@ ProjectTab::ProjectTab(AppLanguage language, QWidget* parent)
             "MIDI files (*.mid *.midi);;All files (*)");
         if (midi_path.isEmpty()) return;
         emit import_midi_song_requested(trimmed, midi_path);
+    });
+
+    connect(import_ngps_btn_, &QPushButton::clicked, this, [this]() {
+        const QString ngps_path = QFileDialog::getOpenFileName(
+            this,
+            ui("Importer un morceau .ngps", "Import a .ngps song"),
+            QString(),
+            "NGPC Song files (*.ngps);;All files (*)");
+        if (ngps_path.isEmpty()) return;
+        const QString default_name = QFileInfo(ngps_path).baseName();
+        bool ok = false;
+        const QString name = QInputDialog::getText(
+            this,
+            ui("Importer morceau .ngps", "Import .ngps song"),
+            ui("Nom du morceau:", "Song name:"),
+            QLineEdit::Normal,
+            default_name,
+            &ok);
+        if (!ok) return;
+        if (name.trimmed().isEmpty()) return;
+        emit import_ngps_song_requested(name.trimmed(), ngps_path);
     });
 
     connect(rename_btn_, &QPushButton::clicked, this, [this]() {
@@ -346,6 +370,7 @@ void ProjectTab::set_project_mode(bool enabled, const QString& mode_label) {
     open_btn_->setEnabled(enabled && song_list_->currentRow() >= 0);
     new_btn_->setEnabled(enabled);
     import_btn_->setEnabled(enabled);
+    import_ngps_btn_->setEnabled(enabled);
     rename_btn_->setEnabled(enabled && song_list_->currentRow() >= 0);
     delete_btn_->setEnabled(enabled && song_list_->currentRow() >= 0);
     export_songs_c_btn_->setEnabled(enabled);

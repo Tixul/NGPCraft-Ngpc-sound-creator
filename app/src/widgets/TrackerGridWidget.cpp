@@ -1040,6 +1040,9 @@ void TrackerGridWidget::contextMenuEvent(QContextMenuEvent* event) {
     auto* transpOctDownAct = menu.addAction(QString("%1\tCtrl+Shift+Down").arg(ui("Transpose -12", "Transpose -12")));
     menu.addSeparator();
 
+    auto* setInstAct = menu.addAction(ui("Choisir instrument...", "Set instrument..."));
+    menu.addSeparator();
+
     auto* interpAct = menu.addAction(QString("%1\tCtrl+I").arg(ui("Interpoler colonne", "Interpolate field")));
     interpAct->setEnabled(hasSel || has_discrete_selection());
     auto* humanizeAct = menu.addAction(QString("%1\tCtrl+H").arg(ui("Humanize attenuation", "Humanize attenuation")));
@@ -1068,6 +1071,7 @@ void TrackerGridWidget::contextMenuEvent(QContextMenuEvent* event) {
     else if (chosen == transpDownAct) emit transpose_requested(-1);
     else if (chosen == transpOctUpAct) emit transpose_requested(12);
     else if (chosen == transpOctDownAct) emit transpose_requested(-12);
+    else if (chosen == setInstAct) emit instrument_dialog_requested(cursor_ch_, cursor_row_);
     else if (chosen == interpAct)  emit interpolate_requested();
     else if (chosen == humanizeAct) emit humanize_requested();
     else if (chosen == batchApplyAct) emit batch_apply_requested();
