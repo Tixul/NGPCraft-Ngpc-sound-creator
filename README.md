@@ -89,3 +89,7 @@ The included NeoPop Z80 core is licensed for non-commercial use only.
 If you intend to use this tool in a commercial context,
 you must replace this component or obtain proper permission.
 
+Music, sound effects and data generated with this tool
+are not affected by the license of the software and may
+be used freely, including in commercial projects.
+
