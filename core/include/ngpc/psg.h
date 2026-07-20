@@ -1,58 +1,47 @@
 #pragma once
 
 #include <cstdint>
-#include <mutex>
+#include <memory>
 
 namespace ngpc {
 
-class PsgChip {
-public:
-    enum class Mode {
-        kTone,
-        kNoise,
-    };
-
-    PsgChip();
-    void reset(int sample_rate_hz);
-    void write(uint8_t data);
-    int16_t sample();
-    void set_mode(Mode mode);
-    Mode mode() const;
-
-private:
-    static constexpr int kMaxOutput = 0x7fff;
-    static constexpr int kStep = 0x10000;
-    static constexpr int kClockHz = 3072000;
-
-    int last_reg_;
-    int reg_[8];
-    int volume_[4];
-    int period_[4];
-    int count_[4];
-    int output_[4];
-
-    uint32_t rng_;
-    int noise_fb_;
-    uint32_t update_step_;
-    int32_t vol_table_[16];
-    Mode mode_ = Mode::kTone;
-
-    void rebuild_vol_table();
-    void update_tone_period(int reg_index);
-    void update_noise_period();
-};
-
+// The T6W28, driven from the Z80's two sound ports.
+//
+// ⚡ ONE CHIP, TWO PORTS -- NOT TWO CHIPS. This used to run a pair of SN76489-style
+// objects named `tone_` and `noise_`, rendering the squares from one and the noise
+// from the other and summing to mono. That worked only because the shipped driver
+// mirrors every command byte to both ports, keeping the two in lockstep; it had no
+// way to express what the real chip does. The T6W28 has a RIGHT port and a LEFT
+// port, and they are NOT symmetric:
+//
+//     write_tone()  = Z80 0x4001 = LEFT  -> the tone periods (channels 0..2)
+//     write_noise() = Z80 0x4000 = RIGHT -> the noise control, and tone-3's period
+//                                           reused as the noise period
+//     volume writes work on BOTH ports, one stereo side each -- that IS the stereo
+//
+// The method names are kept for source compatibility; read them as "port 0x4001"
+// and "port 0x4000". A mirroring driver still comes out correct MONO, for the same
+// reason it does on silicon.
 class PsgMixer {
 public:
+    PsgMixer();
+    ~PsgMixer();
+
+    PsgMixer(const PsgMixer&) = delete;
+    PsgMixer& operator=(const PsgMixer&) = delete;
+
     void reset(int sample_rate_hz);
-    void write_tone(uint8_t data);
-    void write_noise(uint8_t data);
+    void write_tone(uint8_t data);    // Z80 0x4001 -> LEFT port
+    void write_noise(uint8_t data);   // Z80 0x4000 -> RIGHT port
+
+    // Renders `frames` MONO samples. The chip itself is stereo; the two sides are
+    // averaged here because this tool's audio path is mono end to end. With a
+    // mirroring driver the two sides are equal, so nothing is lost.
     void render(int16_t* out, int frames);
 
 private:
-    PsgChip tone_;
-    PsgChip noise_;
-    std::mutex mutex_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace ngpc

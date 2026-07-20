@@ -835,27 +835,39 @@ bool MainWindow::write_project_sfx_export(QString* error) const {
 
     const auto append_u8 = [&](const QString& name, const auto& getter) {
         code += "const unsigned char " + name + "[] = {";
-        for (int i = 0; i < project_doc_.sfx.size(); ++i) {
-            if (i) code += ", ";
-            code += QString::number(getter(project_doc_.sfx[i]));
+        if (project_doc_.sfx.empty()) {
+            code += "0";
+        } else {
+            for (int i = 0; i < project_doc_.sfx.size(); ++i) {
+                if (i) code += ", ";
+                code += QString::number(getter(project_doc_.sfx[i]));
+            }
         }
         code += "};\n";
     };
 
     const auto append_u16 = [&](const QString& name, const auto& getter) {
         code += "const unsigned short " + name + "[] = {";
-        for (int i = 0; i < project_doc_.sfx.size(); ++i) {
-            if (i) code += ", ";
-            code += QString::number(getter(project_doc_.sfx[i]));
+        if (project_doc_.sfx.empty()) {
+            code += "0";
+        } else {
+            for (int i = 0; i < project_doc_.sfx.size(); ++i) {
+                if (i) code += ", ";
+                code += QString::number(getter(project_doc_.sfx[i]));
+            }
         }
         code += "};\n";
     };
 
     const auto append_s16 = [&](const QString& name, const auto& getter) {
         code += "const signed short " + name + "[] = {";
-        for (int i = 0; i < project_doc_.sfx.size(); ++i) {
-            if (i) code += ", ";
-            code += QString::number(getter(project_doc_.sfx[i]));
+        if (project_doc_.sfx.empty()) {
+            code += "0";
+        } else {
+            for (int i = 0; i < project_doc_.sfx.size(); ++i) {
+                if (i) code += ", ";
+                code += QString::number(getter(project_doc_.sfx[i]));
+            }
         }
         code += "};\n";
     };

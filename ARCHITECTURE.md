@@ -37,8 +37,12 @@ Audio preview
 -------------------------------------------------------------------------------
 NEXT CORE MODULES
 -------------------------------------------------------------------------------
-- psg/     : T6W28 emulator (NeoPop-based)
-- z80/     : Z80 core for driver execution (Marat Fayzullin, non-commercial)
+- psg/     : T6W28 emulator (NGPCraft clean-room, first-party; ONE chip, two
+             asymmetric ports -- 0x4001 = LEFT/tone periods, 0x4000 = RIGHT/noise
+             control -- see core/third_party/ngpc_apu/apu_core.hpp)
+- z80/     : Z80 core for driver execution (NGPCraft clean-room, first-party;
+             vendored from the NGPCraft emulator as a header-only core templated
+             on a Bus -- see core/third_party/ngpc_z80/z80_core.hpp)
 - midi/    : parser + K1Sound rules
 - format/  : K1Sound encoder (group/list + BGM/SE)
 - project/ : project model (JSON)

@@ -78,18 +78,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package_windows.ps1 -BuildDir
 - Driver integration quickstart: `driver_custom_latest/INTEGRATION_QUICKSTART.md`
 - Architecture notes: `ARCHITECTURE.md`
 
-## License Notes
+## License
 
-This project is licensed under GNU GPL v3.
+This project is licensed under the **MIT License** — Copyright (c) 2026 Willy (Tixul).
+See `LICENSE`.
 
-Qt 6: GPL/LGPL (project currently uses GPL path)
+Both emulation cores — the Z80 CPU and the T6W28 PSG — are first-party: clean-room
+code, vendored from the NGPCraft emulator. There is no third-party emulation code in
+this tool.
 
-⚠ Important:
-The included NeoPop Z80 core is licensed for non-commercial use only.
-If you intend to use this tool in a commercial context,
-you must replace this component or obtain proper permission.
+The distributed Windows build bundles **Qt 6** (used under LGPL v3, dynamically linked)
+and, through Qt Multimedia, the **FFmpeg** libraries. Those keep their own licenses;
+see `THIRD_PARTY.md`. None of that constrains reuse of this project's own MIT source.
 
-Music, sound effects and data generated with this tool
-are not affected by the license of the software and may
-be used freely, including in commercial projects.
+Music, sound effects and data created with this tool are yours — not a derivative of
+the software, and free to use commercially.
 

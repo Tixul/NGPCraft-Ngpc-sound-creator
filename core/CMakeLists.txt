@@ -9,12 +9,17 @@ add_library(ngpc_sound_core STATIC
     src/project.cpp
     src/sound_engine.cpp
     src/z80_machine.cpp
-    third_party/z80/Z80.c
 )
 
 target_include_directories(ngpc_sound_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/z80
+)
+
+# The Z80 core is header-only and reached only by z80_machine.cpp, which hides it
+# behind a pimpl -- so it stays PRIVATE and out of every other translation unit.
+target_include_directories(ngpc_sound_core PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ngpc_z80
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ngpc_apu
 )
 
 target_compile_features(ngpc_sound_core PUBLIC cxx_std_17)

@@ -674,11 +674,27 @@ Ligne  Note   Inst  Attn  FX
   - Clarifier/valider le mapping "white/pink" du tool SNK vs periodic/white PSG T6W28 (UI + export + doc)
   - Calibration niveaux tone/noise (comparatif tool vs emu vs hardware) + presets de validation prebacked/hybrid
 - PSG preview fidelity (ex-PSG_NOTES centralise, restant):
-  - P1 (preview parity): review mono mixer gain staging in `PsgMixer::render()` (`(tone + noise) / 2`) and validate against hardware/emu captures before changing.
+  - P3 (preview parity) -- OPTIONNEL, non bloquant : `tools/psg_calibration/`.
+    ⚠️ EXIGE UN ENREGISTREUR EXTERNE. La console ne peut PAS se mesurer elle-meme : son
+    convertisseur A/N n'a qu'UNE voie, cablee sur la tension batterie (SDK `SysPro.txt`).
+    Aucun chiffre affichable a l'ecran ne remplace la capture.
+    Pourquoi ce n'est pas bloquant : (1) le niveau absolu est deja explique (voir plus bas),
+    (2) courbe d'attenuation / sommation / bruit ont des reponses DOCUMENTEES (doc SNK :
+    attenuation 4 bits, 16 niveaux ; sommation analogique de 4 voies = lineaire),
+    (3) du son de ce tool tourne deja sur console reelle dans des jeux finis.
+    La mesure confirmerait, elle ne decouvrirait pas.
+    ROM a flasher + script d'analyse d'enregistrement. Mesure la courbe d'attenuation, la loi
+    de sommation et le rapport bruit/ton. Le NIVEAU ABSOLU n'est PAS un sujet de fidelite :
+    4096 vs 5461 s'explique entierement (l'ancien modele donnait 1/3 du pleine echelle par voie
+    puis divisait par 2 ; le nouveau donne 1/4 d'une somme de 4 voies, ce que fait le silicium).
+    Les 4 voies au maximum tombent sur 16384 = moitie de la pleine echelle = 6 dB de marge.
+    Voir tools/psg_calibration/README.md.
   - P1 (preview quality): finaliser l'audit anti-redondance noise control dans tous les chemins UI (Player/Tracker/SFX/preview direct), avec cache `rate/type` uniforme.
   - P2 (API cleanup): split helper API into explicit noise-mode write vs noise-attenuation write to prevent accidental LFSR reseed patterns from repeated register-6 writes.
   - P2 (diagnostics): add debug counters for noise control writes and RNG reseed events to make 60 Hz repetition issues measurable during tests.
-  - P2 (hardware fidelity): verify white-noise LFSR polynomial/seed for T6W28 on hardware references; keep NeoPop-compatible defaults until confirmed.
+  - P2 (hardware fidelity): verify white-noise LFSR polynomial/seed for T6W28 on hardware
+    references. Le modele actuel est celui de l'emulateur (tap 13, shifter reseede a 0x4000 a
+    chaque reconfiguration), tenu a l'oracle Python `core/apu.py` (clean-room, first-party).
   - P3: add targeted tests (long noise continuity, tone+noise level calibration vs reference captures, regression checks for note-table playback and existing exports).
   - P3: add stereo if needed (currently mono).
 
@@ -738,5 +754,9 @@ core/
   installer **Inno Setup 6** (le zip portable reste utilisable sans installateur).
 
 ## Licence
-- Qt 6 : GPL/LGPL (option GPL utilisee ici)
-- Z80 core (Marat Fayzullin) : restriction non-commerciale -- remplacer si distribution commerciale
+- Le projet est sous **licence MIT** -- Copyright (c) 2026 Willy (Tixul). Voir LICENSE.
+- Z80 core ET PSG T6W28 : first-party (clean-room NGPCraft, vendores depuis l'emulateur).
+  Plus aucun code d'emulation tiers dans l'outil.
+- Le build Windows distribue embarque Qt 6 (LGPL v3, lien dynamique) et, via Qt
+  Multimedia, les bibliotheques FFmpeg (LGPL). Elles gardent leur propre licence ; ca ne
+  contraint pas la reutilisation du code MIT du projet. Voir THIRD_PARTY.md.
