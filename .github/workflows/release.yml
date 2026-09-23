@@ -70,8 +70,9 @@ jobs:
           cp -r driver_custom_latest AppDir/usr/share/ngpc_sound_creator/
           printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=NGPC Sound Creator' \
             'Exec=ngpc_sound_creator' 'Icon=ngpc_sound_creator' 'Categories=AudioVideo;Audio;' > ngpc_sound_creator.desktop
-          convert -size 256x256 xc:'#1e2a3a' -fill '#78e0ba' -gravity center -pointsize 72 \
-            -annotate 0 'NGPC' ngpc_sound_creator.png
+          # Placeholder icon (the project has none); no text: the runner has no fonts for ImageMagick.
+          convert -size 256x256 xc:'#1e2a3a' -fill '#78e0ba' -draw 'roundrectangle 48,48 208,208 24,24' \
+            ngpc_sound_creator.png
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
