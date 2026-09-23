@@ -28,14 +28,18 @@ while the emulator only ever runs at 44 100 Hz).
 
 ## Bundled runtime libraries (NOT MIT)
 
-The distributed Windows build carries, alongside the MIT-licensed application:
+The distributed builds (Windows, Linux AppImage, macOS app) carry, alongside the
+MIT-licensed application:
 
-- **Qt 6** — used under **LGPL v3**. The Qt DLLs are dynamically linked and the end
+- **Qt 6** — used under **LGPL v3**. The Qt libraries are dynamically linked and the end
   user may replace them, which is what LGPL v3 requires. <https://www.qt.io/licensing>
 - **FFmpeg** (`avcodec`, `avformat`, `avutil`, `swresample`, `swscale`) — shipped by
   Qt Multimedia under **LGPL v2.1+**. <https://www.ffmpeg.org/legal.html>
 
-Distributing the binary means complying with the LGPL for those DLLs. It does not
+The Linux AppImage also bundles some system libraries from its build distribution
+(Ubuntu 22.04), each under its own license (mostly LGPL/MIT-style).
+
+Distributing the binary means complying with the LGPL for those libraries. It does not
 constrain reuse of this project's own MIT source. See `LICENSE`.
 
 ## ⚡ One chip, two ports — how the PSG is modelled
