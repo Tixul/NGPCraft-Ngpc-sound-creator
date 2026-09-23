@@ -704,6 +704,10 @@ void MainWindow::push_recent_project(const QString& path) const {
 QString MainWindow::resolve_driver_source_dir() const {
     QStringList candidates;
     const QString app_dir = QCoreApplication::applicationDirPath();
+    // Release packages: next to the exe (Windows), in the bundle (macOS), in the AppImage (Linux).
+    candidates.push_back(QDir::cleanPath(QDir(app_dir).filePath("driver_custom_latest")));
+    candidates.push_back(QDir::cleanPath(QDir(app_dir).filePath("../Resources/driver_custom_latest")));
+    candidates.push_back(QDir::cleanPath(QDir(app_dir).filePath("../share/ngpc_sound_creator/driver_custom_latest")));
     candidates.push_back(QDir::cleanPath(QDir(app_dir).filePath("../../driver_custom_latest")));
     candidates.push_back(QDir::cleanPath(QDir(app_dir).filePath("../driver_custom_latest")));
     candidates.push_back(QDir::cleanPath(QDir::current().filePath("driver_custom_latest")));

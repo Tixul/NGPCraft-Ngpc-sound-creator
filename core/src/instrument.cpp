@@ -11,17 +11,17 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         {"Noise Kick",    {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 0, 0, 1, 0, 1, 13, 2}},  // periodic high
         {"Noise HiHat",   {4, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 4, 0, 1, 0, 0, 15, 1}},  // white high
         {"Noise Snare",   {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 5, 0, 1, 0, 1, 11, 2}},  // white mid
-        {"Bright Lead",   {1, 0, 1, 1, 0, 0, 1, 2, 3, 2, 0,   1,  0, 1, 0, 0, 0, 1, 1, 2,  4, 4}},
-        {"Soft Pad",      {4, 0, 1, 1, 0, 0, 1, 1, 5, 4, 0,   1,  0, 1, 0, 0, 0, 1, 3, 4,  8, 8, 1, 0, 10, 2}},
-        {"Pluck",         {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 0, 0, 1, 1, 0, 1, 10, 2}},
-        {"Bass",          {3, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 180, -2, 3, 0, 0, 0, 1, 0, 2,  6, 4}},
-        {"Bell",          {2, 0, 1, 1, 0, 3, 1, 1, 4, 2, 0,   1,  0, 1, 0, 0, 0, 1, 0, 2,  9, 4}},
+        {"Bright Lead",     {1, 0, 1, 1, 0, 0, 1, 2, 3, 2, 0, 1, 0, 1, 0, 0, 0, 1, 1, 2, 3, 4}},
+        {"Soft Pad",        {4, 0, 1, 1, 0, 0, 1, 1, 5, 4, 0, 1, 0, 1, 0, 0, 0, 1, 3, 4, 5, 8, 1, 0, 10, 2}},
+        {"Pluck",           {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 5, 2}},
+        {"Bass",            {3, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 180, -2, 3, 0, 0, 0, 1, 0, 2, 3, 4}},
+        {"Bell",            {2, 0, 1, 1, 0, 3, 1, 1, 4, 2, 0, 1, 0, 1, 0, 0, 0, 1, 0, 2, 5, 4}},
         {"Zap",           {2, 0, 1, 1, 0, 4, 0, 0, 1, 0, 1, 220, -6, 2, 0, 0, 1, 1, 0, 0, 12, 1}},
-        {"Square Brass",  {2, 0, 1, 1, 0, 2, 0, 0, 1, 0, 1, 260, -3, 2, 0, 0, 0, 1, 1, 2,  5, 4}},
-        {"Wide Lead",     {1, 0, 1, 1, 0, 3, 1, 2, 3, 1, 0,   1,  0, 1, 0, 0, 0, 1, 0, 1,  4, 3}},
-        {"Deep Bass",     {2, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 140, -1, 4, 0, 0, 0, 1, 0, 2,  7, 5}},
-        {"Soft Keys",     {3, 0, 1, 1, 1, 0, 1, 1, 4, 3, 0,   1,  0, 1, 0, 0, 0, 1, 2, 3,  8, 6}},
-        {"Chime Pad",     {3, 0, 1, 1, 1, 2, 1, 1, 5, 4, 0,   1,  0, 1, 0, 0, 0, 1, 2, 3,  9, 8, 1, 0, 8, 2}},
+        {"Square Brass",    {2, 0, 1, 1, 0, 2, 0, 0, 1, 0, 1, 260, -3, 2, 0, 0, 0, 1, 1, 2, 3, 4}},
+        {"Wide Lead",       {1, 0, 1, 1, 0, 3, 1, 2, 3, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 3, 3}},
+        {"Deep Bass",       {2, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 140, -1, 4, 0, 0, 0, 1, 0, 2, 3, 5}},
+        {"Soft Keys",       {3, 0, 1, 1, 1, 0, 1, 1, 4, 3, 0, 1, 0, 1, 0, 0, 0, 1, 2, 3, 4, 6}},
+        {"Chime Pad",       {3, 0, 1, 1, 1, 2, 1, 1, 5, 4, 0, 1, 0, 1, 0, 0, 0, 1, 2, 3, 5, 8, 1, 0, 8, 2}},
         {"Sweep Rise FX", {2, 0, 1, 1, 0, 2, 0, 0, 1, 0, 1, 380,  6, 1, 0, 0, 1, 1, 0, 0, 11, 1}},
         {"Sweep Fall FX", {2, 0, 1, 1, 0, 4, 0, 0, 1, 0, 1, 120, -8, 1, 0, 0, 1, 1, 0, 0, 12, 1}},
         {"Noise Clap",    {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 6, 0, 1, 0, 0, 10, 3}},  // white low
@@ -29,16 +29,25 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         {"Open HiHat",    {4, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 4, 0, 1, 0, 0, 14, 4}},  // white high
         {"Noise Tom",     {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 1, 0, 1, 0, 1, 11, 3}},  // periodic medium
         {"Siren FX",      {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1,  90, -2, 2, 0, 0, 0, 1, 0, 0, 10, 2, 1, 0, 2, 9}},
-        {"Chip Lead PWM", {1, 0, 1, 1, 0, 0, 1, 1, 3, 1, 0,   1,  0, 1, 0, 0, 0, 1, 0, 1,  4, 3, 1, 1, 4, 4}},
+        {"Chip Lead PWM",   {1, 0, 1, 1, 0, 0, 1, 1, 3, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 3, 3, 1, 1, 4, 4}},
         {"Pulse Organ",   {2, 0, 1, 1, 0, 0, 1, 1, 6, 10, 0,  1,  0, 1, 0, 0, 0, 0, 0, 0,  0, 0, 1, 1, 6, 2}},
         {"Chip Piano",    {2, 1, 2, 1, 2, 0, 0, 0, 1, 0, 0,   1,  0, 1, 0, 0, 1, 0, 0, 0,  0, 0}},
-        {"Air Pad",       {5, 0, 1, 1, 0, 0, 1, 1, 6, 6, 0,   1,  0, 1, 0, 0, 0, 1, 6, 6,  9,12, 1, 0,12, 1}},
-        {"Pulse Bass",    {2, 0, 1, 1, 0, 5, 0, 0, 1, 0, 1, 220, -3, 2, 0, 0, 3, 1, 0, 2,  7, 4}},
-        {"Metal Lead",    {1, 0, 1, 1, 0, 6, 1, 2, 2, 1, 0,   1,  0, 1, 0, 0, 0, 1, 0, 1,  4, 4, 1, 1, 3, 3}},
+        {"Air Pad",         {5, 0, 1, 1, 0, 0, 1, 1, 6, 6, 0, 1, 0, 1, 0, 0, 0, 1, 6, 6, 6, 12, 1, 0, 12, 1}},
+        {"Pulse Bass",      {2, 0, 1, 1, 0, 5, 0, 0, 1, 0, 1, 220, -3, 2, 0, 0, 3, 1, 0, 2, 3, 4}},
+        {"Metal Lead",      {1, 0, 1, 1, 0, 6, 1, 2, 2, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 3, 4, 1, 1, 3, 3}},
         {"UI Blip",       {1, 1, 2, 1, 2, 7, 0, 0, 1, 0, 1, 300,-18, 1, 0, 0, 0, 0, 0, 0,  0, 0}},
         {"Noise Ride",    {5, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 6, 0, 1, 0, 1, 13, 8}},
         {"Noise Rim",     {1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 0, 0, 1, 0, 0, 12, 1}},
         {"Noise Shaker",  {6, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0,   1,  0, 1, 1, 4, 0, 1, 0, 0, 14, 2}},
+        /* --- Releves sur les 20 BGM commerciales (recherche_bgm) ---------------
+         * Attenuation tenue de 3 a 6, contraste attaque/plateau de 4 a 6 crans,
+         * aucun LFO : c'est ce que font les jeux officiels. */
+        {"Corpus Pluck",    {0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 6, 2}},
+        {"Corpus Plateau",  {1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 3, 6, 3}},
+        {"Corpus Lead",     {0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 5, 1}},
+        {"Corpus Nappe",    {4, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 4, 5, 6}},
+        {"Corpus Bass",     {0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 2, 5, 2}},
+        {"Corpus Staccato", {2, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 9, 1}},
     };
 
     // New modulation fields were added after legacy presets.
@@ -72,15 +81,15 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         auto& d = presets[4].def;
         d.adsr_sustain_rate = 2;
         d.lfo_on = 1;
-        d.lfo_wave = 1;
+        d.lfo_wave = 0;
         d.lfo_hold = 2;
         d.lfo_rate = 4;
-        d.lfo_depth = 6;
+        d.lfo_depth = 1;
         d.lfo2_on = 1;
         d.lfo2_wave = 0;
         d.lfo2_hold = 0;
         d.lfo2_rate = 3;
-        d.lfo2_depth = 5;
+        d.lfo2_depth = 1;
         d.lfo_algo = 1;
     }
 
@@ -92,12 +101,12 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         d.lfo_wave = 0;
         d.lfo_hold = 8;
         d.lfo_rate = 6;
-        d.lfo_depth = 4;
+        d.lfo_depth = 2;
         d.lfo2_on = 1;
-        d.lfo2_wave = 2;
+        d.lfo2_wave = 0;
         d.lfo2_hold = 16;
         d.lfo2_rate = 8;
-        d.lfo2_depth = 3;
+        d.lfo2_depth = 2;
         d.lfo_algo = 2;
     }
 
@@ -106,15 +115,15 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         auto& d = presets[8].def;
         d.adsr_sustain_rate = 1;
         d.lfo_on = 1;
-        d.lfo_wave = 2;
+        d.lfo_wave = 0;
         d.lfo_hold = 0;
         d.lfo_rate = 3;
-        d.lfo_depth = 4;
+        d.lfo_depth = 1;
         d.lfo2_on = 1;
         d.lfo2_wave = 0;
         d.lfo2_hold = 4;
         d.lfo2_rate = 5;
-        d.lfo2_depth = 2;
+        d.lfo2_depth = 1;
         d.lfo_algo = 4;
     }
 
@@ -126,12 +135,12 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         d.lfo_wave = 0;
         d.lfo_hold = 10;
         d.lfo_rate = 7;
-        d.lfo_depth = 6;
+        d.lfo_depth = 2;
         d.lfo2_on = 1;
-        d.lfo2_wave = 2;
+        d.lfo2_wave = 0;
         d.lfo2_hold = 20;
         d.lfo2_rate = 10;
-        d.lfo2_depth = 4;
+        d.lfo2_depth = 2;
         d.lfo_algo = 2;
     }
 
@@ -140,15 +149,15 @@ std::vector<InstrumentPreset> FactoryInstrumentPresets() {
         auto& d = presets[27].def;
         d.adsr_sustain_rate = 2;
         d.lfo_on = 1;
-        d.lfo_wave = 1;
+        d.lfo_wave = 0;
         d.lfo_hold = 0;
         d.lfo_rate = 3;
-        d.lfo_depth = 5;
+        d.lfo_depth = 1;
         d.lfo2_on = 1;
-        d.lfo2_wave = 2;
+        d.lfo2_wave = 0;
         d.lfo2_hold = 2;
         d.lfo2_rate = 4;
-        d.lfo2_depth = 3;
+        d.lfo2_depth = 1;
         d.lfo_algo = 2;
     }
 

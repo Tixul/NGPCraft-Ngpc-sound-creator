@@ -67,3 +67,11 @@ target_include_directories(ngpc_sound_creator PRIVATE
 )
 
 target_compile_features(ngpc_sound_creator PRIVATE cxx_std_17)
+
+if(APPLE)
+    set_target_properties(ngpc_sound_creator PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "NGPC Sound Creator"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ngpcraft.soundcreator"
+    )
+endif()

@@ -1,0 +1,127 @@
+# Builds NGPC Sound Creator for Windows, Linux and macOS.
+#  - Push a tag "vX.Y.Z"  -> builds the 3 packages and publishes a GitHub Release.
+#  - "Run workflow" button -> builds the 3 packages as downloadable artifacts only.
+name: Release builds
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: "6.10.2"   # same as the local dev setup (Qt 6.10.2 + MinGW 13.1)
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_mingw
+          modules: qtmultimedia
+          tools: tools_mingw1310 tools_ninja
+          cache: true
+      - name: Build
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:IQTA_TOOLS\mingw1310_64\bin;$env:IQTA_TOOLS\Ninja;$env:PATH"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Package
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:IQTA_TOOLS\mingw1310_64\bin;$env:PATH"
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { "dev-$($env:GITHUB_SHA.Substring(0,7))" }
+          ./scripts/package_windows.ps1 -BuildDir build -Version $version -CreateInstaller
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.zip
+            dist/*.exe
+
+  linux:
+    runs-on: ubuntu-22.04   # oldest glibc = AppImage runs on most distros
+    steps:
+      - uses: actions/checkout@v4
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgl1-mesa-dev libxkbcommon-dev libxcb-cursor0 \
+            libpulse-dev libfuse2 imagemagick
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtmultimedia
+          cache: true
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Package (AppImage)
+        run: |
+          version=$([ "$GITHUB_REF_TYPE" = tag ] && echo "${GITHUB_REF_NAME#v}" || echo "dev-${GITHUB_SHA::7}")
+          mkdir -p AppDir/usr/share/ngpc_sound_creator
+          cp -r driver_custom_latest AppDir/usr/share/ngpc_sound_creator/
+          printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=NGPC Sound Creator' \
+            'Exec=ngpc_sound_creator' 'Icon=ngpc_sound_creator' 'Categories=AudioVideo;Audio;' > ngpc_sound_creator.desktop
+          convert -size 256x256 xc:'#1e2a3a' -fill '#78e0ba' -gravity center -pointsize 72 \
+            -annotate 0 'NGPC' ngpc_sound_creator.png
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          export QMAKE="$QT_ROOT_DIR/bin/qmake" LDAI_OUTPUT="ngpc_sound_creator-linux-$version-x86_64.AppImage"
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir -e build/app/ngpc_sound_creator \
+            -d ngpc_sound_creator.desktop -i ngpc_sound_creator.png --plugin qt --output appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: "*.AppImage"
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtmultimedia
+          cache: true
+      - name: Build (universal - Apple Silicon + Intel)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+          cmake --build build --parallel
+      - name: Package (DMG)
+        run: |
+          version=$([ "$GITHUB_REF_TYPE" = tag ] && echo "${GITHUB_REF_NAME#v}" || echo "dev-${GITHUB_SHA::7}")
+          app="build/app/NGPC Sound Creator.app"
+          mv build/app/ngpc_sound_creator.app "$app"
+          cp -R driver_custom_latest "$app/Contents/Resources/"
+          macdeployqt "$app"
+          codesign --force --deep --sign - "$app"   # ad-hoc: required to launch on Apple Silicon
+          hdiutil create -volname "NGPC Sound Creator" -srcfolder "$app" -ov -format UDZO \
+            "ngpc_sound_creator-macos-$version.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: "*.dmg"
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packages/*
+          generate_release_notes: true

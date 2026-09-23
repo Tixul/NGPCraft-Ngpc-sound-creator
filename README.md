@@ -43,6 +43,11 @@ If you use another driver, advanced features may differ in sound or behavior.
 - **Stereo PAN runtime (`0xF5`)**: opcode is reserved but currently consumed as no-op (mono-safe behavior).
 - **Generic cross-driver compatibility**: not a primary goal; parity is tuned for the provided driver pack.
 
+## Download
+
+Ready-to-run builds for **Windows** (zip + installer), **Linux** (AppImage) and **macOS** (universal DMG) are attached to each [release](https://github.com/Tixul/NGPCraft-Ngpc-sound-creator/releases/latest).
+The macOS build is not notarized: the first time, right-click the app and choose **Open**.
+
 ## Quick Start
 
 ### Build (MinGW / Qt)
