@@ -13,6 +13,7 @@ class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
+class QStackedWidget;
 class QTimer;
 class QString;
 class EngineHub;
@@ -21,6 +22,7 @@ class SongDocument;
 class TrackerGridWidget;
 class TrackerPlaybackEngine;
 class InstrumentPlayer;
+class PianoRollWidget;
 
 class TrackerTab : public QWidget
 {
@@ -53,6 +55,12 @@ private:
     SongDocument* song_ = nullptr;          // owns all patterns
     TrackerDocument* doc_ = nullptr;        // convenience: song_->active_pattern()
     TrackerGridWidget* grid_ = nullptr;
+    PianoRollWidget* piano_ = nullptr;      // alternative view of the same pattern
+    QStackedWidget* view_stack_ = nullptr;  // grid_ | piano_
+    QPushButton* view_tracker_btn_ = nullptr;
+    QPushButton* view_piano_btn_ = nullptr;
+    QWidget* piano_voice_bar_ = nullptr;
+    std::array<QPushButton*, 4> piano_voice_btns_{};
     TrackerPlaybackEngine* engine_ = nullptr;
     InstrumentPlayer* preview_player_ = nullptr;
     QPlainTextEdit* log_ = nullptr;
@@ -136,6 +144,7 @@ private:
     void update_kb_ref_label();
     void update_status_label();
     void update_bpm_label();
+    void set_piano_roll_view(bool on);
 
     // Pattern/Order management
     void switch_to_pattern(int index);

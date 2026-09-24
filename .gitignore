@@ -42,3 +42,6 @@ node_modules/
 # Misc
 *.db
 *.sqlite
+
+# Local development log (not published)
+DEVLOG.md

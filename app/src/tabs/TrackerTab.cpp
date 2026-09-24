@@ -17,7 +17,9 @@
 #include <QSaveFile>
 #include <QShortcut>
 #include <QSizePolicy>
+#include <QSettings>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -37,6 +39,7 @@
 #include "i18n/AppLanguage.h"
 #include "models/InstrumentStore.h"
 #include "models/SongDocument.h"
+#include "widgets/PianoRollWidget.h"
 #include "widgets/TrackerGridWidget.h"
 #include <QListWidget>
 #include "widgets/FxInputDialog.h"
@@ -352,6 +355,7 @@ TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
     song_ = new SongDocument(this);
     doc_ = song_->active_pattern();
     grid_ = new TrackerGridWidget(doc_, this);
+    piano_ = new PianoRollWidget(doc_, this);
 
     // Playback engine
     engine_ = new TrackerPlaybackEngine(this);
@@ -427,6 +431,54 @@ TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
         "Estimated BPM (based on TPR and 60fps)"));
     bpm_label_->setFixedWidth(80);
     transport_row->addWidget(bpm_label_);
+
+    // View switch: the piano roll is an alternative to the tracker grid
+    transport_row->addSpacing(10);
+    transport_row->addWidget(new QLabel(ui("Vue:", "View:"), this));
+    view_tracker_btn_ = new QPushButton("Tracker", this);
+    view_piano_btn_ = new QPushButton("Piano Roll", this);
+    for (QPushButton* b : {view_tracker_btn_, view_piano_btn_}) {
+        b->setCheckable(true);
+        b->setAutoExclusive(true);
+        b->setStyleSheet("QPushButton:checked { background: #3a5a8a; color: white; font-weight: bold; }");
+        b->setToolTip(ui("Basculer entre la grille tracker et le piano roll (F9)",
+                         "Switch between the tracker grid and the piano roll (F9)"));
+        transport_row->addWidget(b);
+    }
+    view_tracker_btn_->setChecked(true);
+
+    piano_voice_bar_ = new QWidget(this);
+    auto* voice_row = new QHBoxLayout(piano_voice_bar_);
+    voice_row->setContentsMargins(6, 0, 0, 0);
+    voice_row->setSpacing(2);
+    voice_row->addWidget(new QLabel(ui("Voie:", "Voice:"), piano_voice_bar_));
+    static const char* kVoiceLabels[4] = {"T0", "T1", "T2", "N"};
+    for (int ch = 0; ch < 4; ++ch) {
+        auto* b = new QPushButton(QString::fromLatin1(kVoiceLabels[ch]), piano_voice_bar_);
+        b->setCheckable(true);
+        b->setAutoExclusive(true);
+        b->setFixedWidth(32);
+        b->setStyleSheet("QPushButton:checked { background: #806a20; color: white; font-weight: bold; }");
+        b->setToolTip(ui("Voie affichee dans le piano roll (Tab / Maj+Tab)",
+                         "Voice shown in the piano roll (Tab / Shift+Tab)"));
+        voice_row->addWidget(b);
+        piano_voice_btns_[static_cast<size_t>(ch)] = b;
+    }
+    piano_voice_btns_[0]->setChecked(true);
+    auto* piano_hint = new QLabel(ui(
+        "Clic: poser | Glisser: deplacer, bord droit: allonger | Clic droit: effacer | "
+        "Maj+glisser: selection | Double-clic: instrument | Bande Vol: volume | Aide: onglet Aide",
+        "Click: add | Drag: move, right edge: stretch | Right-click: erase | "
+        "Shift+drag: select | Double-click: instrument | Vol lane: volume | More: Help tab"),
+        piano_voice_bar_);
+    piano_hint->setStyleSheet("QLabel { color: #8a8aa0; }");
+    piano_hint->setToolTip(piano_hint->text());
+    piano_hint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // never widens the window
+    piano_voice_bar_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    voice_row->addSpacing(8);
+    voice_row->addWidget(piano_hint);
+    piano_voice_bar_->setVisible(false);
+    transport_row->addWidget(piano_voice_bar_, 1);
     transport_row->addStretch(1);
     root->addLayout(transport_row);
 
@@ -581,7 +633,10 @@ TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
     // --- Main area: tracker + right control panel ---
     auto* grid_row = new QHBoxLayout();
     grid_row->setSpacing(8);
-    grid_row->addWidget(grid_, 1);
+    view_stack_ = new QStackedWidget(this);
+    view_stack_->addWidget(grid_);
+    view_stack_->addWidget(piano_);
+    grid_row->addWidget(view_stack_, 1);
 
     auto* side_panel = new QWidget(this);
     side_panel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
@@ -778,6 +833,53 @@ TrackerTab::TrackerTab(EngineHub* hub, InstrumentStore* store, QWidget* parent)
         tpr_spin_->blockSignals(false);
         update_bpm_label();
     });
+
+    // Piano roll mirrors the grid (document, cursor, playback row, mutes)
+    connect(grid_, &TrackerGridWidget::document_switched, piano_, &PianoRollWidget::set_document);
+    connect(grid_, &TrackerGridWidget::playback_row_changed, piano_, &PianoRollWidget::set_playback_row);
+    connect(grid_, &TrackerGridWidget::channel_mute_changed, piano_, &PianoRollWidget::set_channel_muted);
+    connect(grid_, &TrackerGridWidget::cursor_moved, this, [this](int ch, int row) {
+        piano_->set_channel(ch);
+        piano_->set_cursor_row(row);
+        piano_voice_btns_[static_cast<size_t>(ch)]->setChecked(true);
+    });
+    connect(piano_, &PianoRollWidget::cursor_row_clicked, this, [this](int row) {
+        grid_->set_cursor(grid_->cursor_ch(), row, grid_->cursor_sub());
+    });
+    connect(piano_, &PianoRollWidget::channel_requested, this, [this](int ch) {
+        grid_->set_cursor(ch, grid_->cursor_row(), TrackerGridWidget::SubNote);
+    });
+    for (int ch = 0; ch < 4; ++ch) {
+        connect(piano_voice_btns_[static_cast<size_t>(ch)], &QPushButton::clicked, this, [this, ch]() {
+            grid_->set_cursor(ch, grid_->cursor_row(), TrackerGridWidget::SubNote);
+            piano_->setFocus();
+        });
+    }
+    // Same transport keys and key preview as the grid
+    connect(piano_, &PianoRollWidget::play_stop_toggled, grid_, &TrackerGridWidget::play_stop_toggled);
+    connect(piano_, &PianoRollWidget::play_from_start_requested, grid_, &TrackerGridWidget::play_from_start_requested);
+    connect(piano_, &PianoRollWidget::stop_requested, grid_, &TrackerGridWidget::stop_requested);
+    connect(piano_, &PianoRollWidget::note_preview_requested, grid_, &TrackerGridWidget::note_preview_requested);
+    connect(piano_, &PianoRollWidget::mute_toggle_requested, grid_, &TrackerGridWidget::channel_header_clicked);
+    connect(piano_, &PianoRollWidget::save_requested, grid_, &TrackerGridWidget::save_requested);
+    connect(piano_, &PianoRollWidget::load_requested, grid_, &TrackerGridWidget::load_requested);
+    // Double-click on a bar: same instrument dialog as the tracker, on that cell only
+    connect(piano_, &PianoRollWidget::instrument_dialog_requested, this, [this](int ch, int row) {
+        grid_->clear_selection();
+        grid_->set_cursor(ch, row, TrackerGridWidget::SubInst);
+        emit grid_->instrument_dialog_requested(ch, row);
+    });
+
+    connect(view_tracker_btn_, &QPushButton::clicked, this, [this]() { set_piano_roll_view(false); });
+    connect(view_piano_btn_, &QPushButton::clicked, this, [this]() { set_piano_roll_view(true); });
+    auto* view_shortcut = new QShortcut(QKeySequence(Qt::Key_F9), this);
+    view_shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(view_shortcut, &QShortcut::activated, this, [this]() {
+        set_piano_roll_view(view_stack_->currentWidget() != piano_);
+    });
+    if (QSettings("NGPC", "SoundCreator").value("tracker/piano_roll_view", false).toBool()) {
+        set_piano_roll_view(true);
+    }
 
     // Engine row_changed -> update grid playback row + follow mode
     connect(engine_, &TrackerPlaybackEngine::row_changed, this, [this](int row) {
@@ -3283,6 +3385,14 @@ void TrackerTab::on_export_asm() {
 // ============================================================
 // Pattern / Order management
 // ============================================================
+
+void TrackerTab::set_piano_roll_view(bool on) {
+    view_stack_->setCurrentWidget(on ? static_cast<QWidget*>(piano_) : static_cast<QWidget*>(grid_));
+    (on ? view_piano_btn_ : view_tracker_btn_)->setChecked(true);
+    piano_voice_bar_->setVisible(on);
+    (on ? static_cast<QWidget*>(piano_) : static_cast<QWidget*>(grid_))->setFocus();
+    QSettings("NGPC", "SoundCreator").setValue("tracker/piano_roll_view", on);
+}
 
 void TrackerTab::switch_to_pattern(int index) {
     if (index < 0 || index >= song_->pattern_count()) return;

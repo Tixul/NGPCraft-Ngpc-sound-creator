@@ -24,11 +24,11 @@ Emulation PSG T6W28 (3 canaux tone + 1 noise), moteur Z80 integre, export C arra
 |--------|------|
 | **Projet** | Gestion du projet audio (songs, autosave, export all C/ASM, SFX projet) |
 | **Player** | Charger un MIDI / driver SNK, play BGM, export |
-| **Tracker** | Sequenceur 4 canaux avec edition au clavier |
+| **Tracker** | Sequenceur 4 canaux : grille tracker au clavier, ou **Piano Roll** a la souris (F9) |
 | **Instruments** | Editeur d'instruments (enveloppe, vibrato, sweep, pitch curve) |
 | **SFX Lab** | Labo SFX (preview driver-faithful : sweep/env/burst + ADSR5/LFO tone) |
 | **Debug** | Registres PSG, pas-a-pas Z80 |
-| **Aide** | Tutoriel integre complet (13 sections, pour debutants absolus) |
+| **Aide** | Tutoriel integre complet (14 sections, pour debutants absolus) |
 
 ---
 
@@ -407,6 +407,44 @@ NgpcProject_BgmStartLoop4ByIndex(0);
 
 ---
 
+## Piano Roll (vue alternative du Tracker)
+
+Le piano roll affiche et edite **le meme pattern** que le tracker : le temps va de gauche a droite
+(une colonne = une ligne du tracker), la hauteur de bas en haut. Les deux vues restent synchronisees
+(pattern, curseur, lecture, mute/solo, undo). Le format `.ngps`, l'export et le driver ne changent pas.
+
+- **Ouvrir** : onglet Tracker, `Vue : [Tracker] [Piano Roll]` ou **F9**. Le mode est memorise.
+- **Voie** : boutons `T0 / T1 / T2 / N` ou Tab / Shift+Tab (= la colonne du curseur tracker).
+  Les autres voies melodiques sont dessinees en contour gris ; la voie Noise a une ligne par timbre.
+
+| Geste / touche | Action |
+|--------|--------|
+| Clic sur case vide | Poser une note (derniere longueur utilisee) |
+| Clic + glisser | Poser une note de la longueur voulue |
+| Glisser une note | Deplacer (temps + hauteur), avec ecoute |
+| Glisser le bord droit | Allonger / raccourcir |
+| Clic droit (glisse) | Effacer les notes touchees |
+| Double-clic sur une note | Choisir l'instrument |
+| Shift + glisser / Ctrl + clic / Ctrl+A | Selection lasso / ajouter-retirer / tout |
+| Fleche haut / bas (Shift = octave) | Transposer la selection |
+| Ctrl+C / X / V | Copier / couper / coller au curseur |
+| Suppr | Effacer la selection |
+| Echap | Annuler le geste en cours / vider la selection |
+| Bande `Vol` : clic / glisser, clic droit | Regler le volume (attenuation) / revenir au defaut |
+| Clic sur le clavier de gauche | Ecouter une note |
+| Molette, Shift+molette, Ctrl+molette ou +/- | Defiler hauteur, defiler temps, zoom |
+
+Regles :
+- une note n'est ecrite qu'au **relachement** de la souris (un glisser ne detruit pas les notes traversees) ;
+  un geste = un seul Ctrl+Z ;
+- une voie ne joue qu'une note a la fois : poser par-dessus coupe la note en cours ; effacer une note
+  ecrit un note-off pour que la precedente ne continue pas ;
+- les **effets restent sur leur ligne** ; une nouvelle note prend l'instrument et le volume de la
+  derniere note cliquee sur la voie ;
+- les lignes rougeatres du clavier sont sous la tessiture de la puce (diviseur sature a 1023).
+
+---
+
 ## Raccourcis clavier du Tracker
 
 ### Navigation
@@ -601,6 +639,10 @@ Ligne  Note   Inst  Attn  FX
 - Affichage noise explicite (P.H/P.M/P.L/P.T/W.H/W.M/W.L/W.T — type + rate)
 - Barre de status (note, instrument, attenuation, selection)
 - BPM display
+- **Vue Piano Roll** (bouton `Vue` ou F9) sur le meme pattern : poser / deplacer / allonger / effacer
+  les notes a la souris, selection (lasso, Ctrl+clic, Ctrl+A), deplacement de groupe, transposition,
+  copier/coller, bande de volume par note, voies fantomes, voie Noise par timbre
+  (voir la section [Piano Roll](#piano-roll-vue-alternative-du-tracker))
 
 ### Instruments
 - Jusqu'a 128 instruments editables (00-7F)
@@ -665,9 +707,12 @@ Ligne  Note   Inst  Attn  FX
 - Double LFO (LFO1+LFO2) + algorithm routing 0..7 implementes (instrument, export, preview, driver)
 - Robustesse buffer PSG amelioree (pending+commit shadow, retry auto des commandes non envoyees)
 - Ecriture noise control rationalisee cote driver (evite reseed LFSR inutile quand seul l'attn change)
-- Aide integree complete (13 sections)
+- **Piano Roll** : vue alternative du tracker, edition souris complete, synchronisee avec la grille (meme undo, meme fichier)
+- Aide integree complete (14 sections, dont Piano Roll)
 
 **A faire (upgrades priorises) :**
+- Clavier MIDI USB (entree temps reel) : jouer en direct avec l'instrument courant + saisie pas a pas
+  dans le tracker et le piano roll (piste : RtMidi, MIT, Windows/Linux/macOS)
 - Edition tracker avancee : interpolation automations (attn/pitch/fx), humanize leger (restant: templates enrichis + batch ops supplementaires)
 - Tests de non-regression export/driver (format export, bornes parametres, compatibilite)
 - Parite SNK/K1 (audio) restant:
@@ -723,11 +768,13 @@ app/src/
   models/
     ProjectDocument.cpp/.h   -- metadonnees projet (songs, autosave, actif)
     TrackerDocument.cpp/.h   -- modele d'un pattern (grille, undo, clipboard, JSON)
+    NoteSpans.cpp/.h         -- cases d'une voie <-> barres du piano roll (lecture + ecriture)
     SongDocument.cpp/.h      -- morceau complet (banque patterns + ordre + loop)
     InstrumentStore.cpp/.h   -- banque d'instruments (max 128)
   widgets/
     ProjectStartDialog.cpp/.h -- dialogue create/open projet au lancement
-    TrackerGridWidget.cpp/.h -- rendu QPainter de la grille tracker
+    TrackerGridWidget.cpp/.h -- rendu QPainter de la grille tracker (source de verite de la vue)
+    PianoRollWidget.cpp/.h   -- vue Piano Roll du meme pattern (suit la grille)
     EnvelopeCurveWidget.cpp/.h -- visualisation des courbes d'enveloppe
   tabs/
     ProjectTab.cpp/.h        -- gestion songs/autosave/export projet

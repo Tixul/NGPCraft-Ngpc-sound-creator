@@ -26,10 +26,14 @@ add_executable(ngpc_sound_creator
     src/models/TrackerDocument.cpp
     src/models/SongDocument.h
     src/models/SongDocument.cpp
+    src/models/NoteSpans.h
+    src/models/NoteSpans.cpp
     src/widgets/EnvelopeCurveWidget.h
     src/widgets/EnvelopeCurveWidget.cpp
     src/widgets/TrackerGridWidget.h
     src/widgets/TrackerGridWidget.cpp
+    src/widgets/PianoRollWidget.h
+    src/widgets/PianoRollWidget.cpp
     src/widgets/FxInputDialog.h
     src/widgets/FxInputDialog.cpp
     src/widgets/NoteInputDialog.h

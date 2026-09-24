@@ -106,6 +106,7 @@ void TrackerGridWidget::set_document(TrackerDocument* doc) {
     scroll_offset_ = 0;
 
     update();
+    emit document_switched(doc_);
 }
 
 // ============================================================
@@ -222,10 +223,15 @@ void TrackerGridWidget::set_playback_row(int row) {
     playback_row_ = row;
     if (row >= 0) ensure_row_visible(row);
     update();
+    emit playback_row_changed(row);
 }
 
 void TrackerGridWidget::set_channel_muted(int ch, bool muted) {
-    if (ch >= 0 && ch < 4) { channel_muted_[ch] = muted; update(); }
+    if (ch >= 0 && ch < 4) {
+        channel_muted_[ch] = muted;
+        update();
+        emit channel_mute_changed(ch, muted);
+    }
 }
 
 bool TrackerGridWidget::is_channel_muted(int ch) const {

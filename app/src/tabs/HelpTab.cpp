@@ -39,6 +39,7 @@ HelpTab::HelpTab(QWidget* parent)
     topic_list_->addItem(ui("Tracker : edition", "Tracker: editing"));
     topic_list_->addItem(ui("Tracker : avance", "Tracker: advanced"));
     topic_list_->addItem(ui("Tracker : effets", "Tracker: effects"));
+    topic_list_->addItem(ui("Piano Roll", "Piano Roll"));
     topic_list_->addItem(ui("Lecture / Playback", "Playback"));
     topic_list_->addItem(ui("Export C / Sauvegarde", "Export / Save"));
     topic_list_->addItem(ui("SFX Lab", "SFX Lab"));
@@ -82,11 +83,12 @@ void HelpTab::load_topic(int index) {
     case 5:  content_->setHtml(topic_tracker_edit()); break;
     case 6:  content_->setHtml(topic_tracker_advanced()); break;
     case 7:  content_->setHtml(topic_tracker_effects()); break;
-    case 8:  content_->setHtml(topic_playback()); break;
-    case 9:  content_->setHtml(topic_export()); break;
-    case 10: content_->setHtml(topic_sfxlab()); break;
-    case 11: content_->setHtml(topic_shortcuts()); break;
-    case 12: content_->setHtml(topic_faq()); break;
+    case 8:  content_->setHtml(topic_piano_roll()); break;
+    case 9:  content_->setHtml(topic_playback()); break;
+    case 10: content_->setHtml(topic_export()); break;
+    case 11: content_->setHtml(topic_sfxlab()); break;
+    case 12: content_->setHtml(topic_shortcuts()); break;
+    case 13: content_->setHtml(topic_faq()); break;
     default: break;
     }
 }
@@ -871,6 +873,75 @@ Use <code>037</code> for a minor flavor (C, D#, G).</p>
 
     case 8:
         return QStringLiteral(R"(
+<h1>Piano Roll</h1>
+<p>The piano roll is <b>another way to see and write the same pattern</b> as the tracker.
+Time runs left to right (one column = one tracker row), pitch bottom to top.
+Anything you do in one view shows up in the other: the <code>.ngps</code> file, the export
+and the driver do not change.</p>
+
+<h2>Open it</h2>
+<ul>
+<li>Tracker tab, top bar: <b>View: [Tracker] [Piano Roll]</b>, or the <b>F9</b> key.</li>
+<li><b>T0 / T1 / T2 / N</b> (or Tab / Shift+Tab): the voice shown. It is the voice the tracker cursor is on.</li>
+<li>The other melodic voices are drawn as grey outlines, so you can write against them.</li>
+</ul>
+
+<h2>Writing with the mouse</h2>
+<table>
+<tr><th>Gesture</th><th>Result</th></tr>
+<tr><td>Click an empty cell</td><td>Adds a note of the last length used</td></tr>
+<tr><td>Click + drag right</td><td>Adds a note of the length you want</td></tr>
+<tr><td>Drag a note</td><td>Moves it (time and pitch); you hear the new note</td></tr>
+<tr><td>Drag the right edge</td><td>Stretches / shortens the note</td></tr>
+<tr><td>Right-click (drag)</td><td>Erases the notes it touches</td></tr>
+<tr><td>Double-click a note</td><td>Choose its instrument</td></tr>
+<tr><td>Click the keyboard on the left</td><td>Listen to a note (drag = glissando)</td></tr>
+<tr><td>Click the top ruler</td><td>Move the cursor without writing</td></tr>
+</table>
+<p>A note is written only when you <b>release</b> the mouse: while dragging you see a preview and the
+notes you cross are left intact. <b>Esc</b> cancels the current gesture.</p>
+
+<h2>Selection</h2>
+<table>
+<tr><th>Command</th><th>Result</th></tr>
+<tr><td>Shift + drag</td><td>Rubber band selection (Ctrl+Shift: add)</td></tr>
+<tr><td>Ctrl + click</td><td>Add / remove a note from the selection</td></tr>
+<tr><td>Ctrl+A</td><td>All notes of the voice</td></tr>
+<tr><td>Drag a selected note</td><td>Moves the whole selection</td></tr>
+<tr><td>Up / Down arrow</td><td>Transpose by a semitone (Shift: an octave)</td></tr>
+<tr><td>Ctrl+C / Ctrl+X / Ctrl+V</td><td>Copy / cut / paste (at the cursor)</td></tr>
+<tr><td>Delete</td><td>Erase the selection</td></tr>
+</table>
+
+<h2>Volume</h2>
+<p>The <b>Vol</b> lane under the notes shows one stick per note: the higher, the louder
+(it is the tracker attenuation, upside down). Click or drag to set several notes in one stroke.
+<b>Right-click</b>: back to the instrument default (dashed stick).</p>
+
+<h2>Instrument of new notes</h2>
+<p>A new note takes the instrument and volume of <b>the last note you clicked</b> on that voice
+(otherwise those of the previous note). To change it: double-click a note, pick the instrument,
+the next notes follow.</p>
+
+<h2>NGPC rules</h2>
+<ul>
+<li>Each voice plays <b>one note at a time</b>: a note placed over another one cuts it.</li>
+<li>Erasing a note does not let the previous one ring on: it stops where the erased note began.</li>
+<li><b>Effects</b> stay on their row when a note moves. Small white square = the note carries an effect;
+dashed line = portamento (3xx); red edge = note ended by a note-off.</li>
+<li>Reddish rows at the bottom of the keyboard: notes too low, the chip cannot play them in tune.</li>
+<li>Noise voice: one row per timbre, like a drum track.</li>
+</ul>
+
+<h2>Navigation</h2>
+<ul>
+<li>Wheel: up / down; Shift+wheel: move in time; Ctrl+wheel or +/-: zoom.</li>
+<li>Left / Right arrows, Home / End: move the cursor.</li>
+<li>Space, F5, F8, F1-F4, Ctrl+Z / Ctrl+Y, Ctrl+S / Ctrl+O: same as the tracker.</li>
+</ul>
+)");
+    case 9:
+        return QStringLiteral(R"(
 <h1>Playback</h1>
 <h2>Commands</h2>
 <table>
@@ -953,7 +1024,7 @@ Use Stop or Song mode when you need different flow.</p>
 <p>During REC note entry, a short preview trigger (~100 ms) is expected. It is a quick confirmation mechanism, not a full phrase playback.</p>
 )");
 
-    case 9:
+    case 10:
         return QStringLiteral(R"(
 <h1>Export and Save</h1>
 <h2>File formats</h2>
@@ -1260,7 +1331,7 @@ Driver-like preview paths help detect tool/runtime differences early.</p>
 <p>Use tracker copy-as-text for quick sharing/review of pattern content in chats, docs, or issue reports.</p>
 )");
 
-    case 10:
+    case 11:
         return QStringLiteral(R"(
 <h1>SFX Lab</h1>
 <p>SFX Lab is for fast experimentation with tone/noise behavior and one-shot effects.</p>
@@ -1336,7 +1407,7 @@ Driver-like preview paths help detect tool/runtime differences early.</p>
 so gameplay code can trigger effects by id in a deterministic way.</p>
 )");
 
-    case 11:
+    case 12:
         return QStringLiteral(R"(
 <h1>Keyboard Shortcuts</h1>
 <h2>Navigation</h2>
@@ -1402,7 +1473,7 @@ so gameplay code can trigger effects by id in a deterministic way.</p>
 <p>Piano-like key mapping depends on AZERTY/QWERTY mode and octave setting. See Tracker Keyboard topic for full map.</p>
 )");
 
-    case 12:
+    case 13:
         return QStringLiteral(R"(
 <h1>FAQ / Troubleshooting</h1>
 <h2>I press keys but nothing is written</h2>
@@ -2267,6 +2338,77 @@ L'attenuation +4 reste active sur toutes les notes suivantes, jusqu'a un <code>F
 <li>Vous pouvez mettre un effet <b>sans note</b> (la ligne aura "---" en note mais un effet). L'effet s'applique au son deja en cours.</li>
 <li>L'effet <code>000</code> (arpege avec parametre 00) ne fait rien. C'est la valeur par defaut.</li>
 <li>Les effets sont <b>sauvegardes</b> dans les fichiers .ngpat et affiches dans le texte copie (Ctrl+Shift+C).</li>
+</ul>
+)");
+}
+
+QString HelpTab::topic_piano_roll() {
+    return QStringLiteral(R"(
+<h1>Piano Roll</h1>
+<p>Le piano roll est une <b>autre facon de voir et d'ecrire le meme pattern</b> que le tracker.
+Le temps va de gauche a droite (une colonne = une ligne du tracker), la hauteur de bas en haut.
+Ce que vous faites dans une vue apparait aussitot dans l'autre : rien ne change dans le fichier
+<code>.ngps</code>, l'export ou le driver.</p>
+
+<h2>Ouvrir</h2>
+<ul>
+<li>Onglet Tracker, barre du haut : <b>Vue : [Tracker] [Piano Roll]</b>, ou la touche <b>F9</b>.</li>
+<li><b>T0 / T1 / T2 / N</b> (ou Tab / Maj+Tab) : la voie affichee. C'est la voie ou se trouve le curseur du tracker.</li>
+<li>Les autres voies melodiques apparaissent en contour gris, pour composer par-dessus.</li>
+</ul>
+
+<h2>Ecrire a la souris</h2>
+<table>
+<tr><th>Geste</th><th>Effet</th></tr>
+<tr><td>Clic sur une case vide</td><td>Pose une note de la derniere longueur utilisee</td></tr>
+<tr><td>Clic + glisser vers la droite</td><td>Pose une note de la longueur voulue</td></tr>
+<tr><td>Glisser une note</td><td>La deplace (temps et hauteur) ; on entend la nouvelle note</td></tr>
+<tr><td>Glisser le bord droit</td><td>Allonge / raccourcit la note</td></tr>
+<tr><td>Clic droit (glisse)</td><td>Efface les notes touchees</td></tr>
+<tr><td>Double-clic sur une note</td><td>Choisir son instrument</td></tr>
+<tr><td>Clic sur le clavier a gauche</td><td>Ecouter la note (glisser = glissando)</td></tr>
+<tr><td>Clic sur la regle du haut</td><td>Placer le curseur sans ecrire</td></tr>
+</table>
+<p>Une note n'est ecrite qu'au <b>relachement</b> de la souris : pendant le geste, un apercu s'affiche
+et les notes traversees ne sont pas abimees. <b>Echap</b> annule le geste en cours.</p>
+
+<h2>Selection</h2>
+<table>
+<tr><th>Commande</th><th>Effet</th></tr>
+<tr><td>Maj + glisser</td><td>Selection au lasso (Ctrl+Maj : ajoute)</td></tr>
+<tr><td>Ctrl + clic</td><td>Ajoute / retire une note de la selection</td></tr>
+<tr><td>Ctrl+A</td><td>Toutes les notes de la voie</td></tr>
+<tr><td>Glisser une note selectionnee</td><td>Deplace toute la selection</td></tr>
+<tr><td>Fleche haut / bas</td><td>Transpose d'un demi-ton (Maj : une octave)</td></tr>
+<tr><td>Ctrl+C / Ctrl+X / Ctrl+V</td><td>Copier / couper / coller (au curseur)</td></tr>
+<tr><td>Suppr</td><td>Efface la selection</td></tr>
+</table>
+
+<h2>Volume</h2>
+<p>La bande <b>Vol</b> sous les notes montre un baton par note : plus il est haut, plus la note est forte
+(c'est l'attenuation du tracker, a l'envers). Cliquez ou glissez pour regler plusieurs notes d'un geste.
+<b>Clic droit</b> : revenir au volume par defaut de l'instrument (baton en pointilles).</p>
+
+<h2>Instrument des nouvelles notes</h2>
+<p>Une nouvelle note prend l'instrument et le volume de <b>la derniere note cliquee</b> sur cette voie
+(sinon ceux de la note precedente). Pour changer : double-clic sur une note, choisir l'instrument,
+les notes suivantes suivront.</p>
+
+<h2>Regles de la NGPC</h2>
+<ul>
+<li>Chaque voie ne joue <b>qu'une note a la fois</b> : une note posee par-dessus une autre la coupe.</li>
+<li>Effacer une note ne fait pas continuer la precedente : elle s'arrete la ou commencait la note effacee.</li>
+<li>Les <b>effets</b> restent sur leur ligne quand on deplace une note. Petit carre blanc = la note porte un effet ;
+trait pointille = portamento (3xx) ; bord rouge = note terminee par un note-off.</li>
+<li>Lignes rougeatres en bas du clavier : notes trop graves, la puce ne les joue pas juste.</li>
+<li>Voie de bruit : une ligne par timbre, comme une piste de batterie.</li>
+</ul>
+
+<h2>Navigation</h2>
+<ul>
+<li>Molette : monter / descendre ; Maj+molette : avancer dans le temps ; Ctrl+molette ou +/- : zoom.</li>
+<li>Fleches gauche / droite, Debut / Fin : deplacer le curseur.</li>
+<li>Espace, F5, F8, F1-F4, Ctrl+Z / Ctrl+Y, Ctrl+S / Ctrl+O : comme dans le tracker.</li>
 </ul>
 )");
 }

@@ -80,7 +80,16 @@ public:
 
     void ensure_row_visible(int row);
 
+    // Shared with PianoRollWidget
+    static QColor instrument_color(uint8_t inst);
+    static QString note_name(uint8_t midi_note);
+    static QString noise_note_name(uint8_t midi_note);
+
 signals:
+    // State mirrored by the piano roll view
+    void document_switched(TrackerDocument* doc);
+    void playback_row_changed(int row);
+    void channel_mute_changed(int ch, bool muted);
     void cursor_moved(int ch, int row);
     void note_entered(int ch, int row, uint8_t note);
     void note_preview_requested(int ch, uint8_t note);
@@ -161,17 +170,12 @@ private:
 
     bool is_discrete_selected(int ch, int row) const;
 
-    // Instrument color palette (16 hues, cycled by instrument id)
-    static QColor instrument_color(uint8_t inst);
-
     int visible_rows() const;
     int total_width() const;
     int channel_x(int ch) const;
     int hit_test_channel(int mx) const;
     int hit_test_row(int my) const;
 
-    static QString note_name(uint8_t midi_note);
-    static QString noise_note_name(uint8_t midi_note);
     QString cell_display_note(int ch, const TrackerCell& cell) const;
     static QString fx_display(uint8_t fx, uint8_t fx_param);
     static int key_to_note_qwerty(int qt_key, int octave);

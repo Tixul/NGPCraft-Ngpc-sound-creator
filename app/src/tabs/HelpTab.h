@@ -29,6 +29,7 @@ private:
     static QString topic_tracker_edit();
     static QString topic_tracker_advanced();
     static QString topic_tracker_effects();
+    static QString topic_piano_roll();
     static QString topic_playback();
     static QString topic_export();
     static QString topic_sfxlab();
