@@ -151,6 +151,19 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package_windows.ps1 -BuildDir
 Publishing a release with a `vX.Y.Z` version builds all three and attaches them to the release.
 **Actions > Release builds > Run workflow** builds them as downloadable artifacts only, without a release.
 
+## Command Line
+
+`--project <path>` opens a project directly, without the start dialog.
+`<path>` is the project folder (with `ngpc_project.json`) or a song inside it
+(the project is looked up in the song's folder, then its parent folder).
+Without a project found, the start dialog opens as usual.
+
+```bat
+ngpc_sound_creator.exe --project "C:\MyGame\music\songs\theme.ngps"
+```
+
+NgpCraft Studio uses it for "Open in Sound Creator".
+
 ## Documentation
 
 - Full documentation: `DOC.md`
